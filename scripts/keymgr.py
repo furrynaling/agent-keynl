@@ -65,7 +65,8 @@ def get_hostname():
     return platform.node()
 
 def get_kernel():
-    return platform.version() or platform.release()
+    # release=稳定版本号(如6.8.0-101)，version含构建时间戳会随小更新变化
+    return platform.release() or platform.version()
 
 def get_mac():
     """MAC 地址：Linux ip / Windows getmac / Mac ifconfig"""
@@ -130,13 +131,15 @@ def check_hw():
 
 # ===== Shamir 门限分片（3/5） =====
 def shamir_split(secret, n=5, k=3):
-    prime = 2**127 - 1
+    if len(secret) > 65:
+        raise ValueError(f"密码太长({len(secret)}字节)，最多65字节")
+    prime = 2**521 - 1  # Mersenne素数M521，可容纳65字节
     coeffs = [int.from_bytes(secret, 'big')] + [secrets.randbelow(prime) for _ in range(k-1)]
     def eval_poly(x): return sum(c * (x**i) % prime for i, c in enumerate(coeffs)) % prime
     return {i: eval_poly(i) for i in range(1, n+1)}
 
 def shamir_recover(shares):
-    prime = 2**127 - 1
+    prime = 2**521 - 1
     secret = 0
     for i, yi in shares.items():
         num = den = 1
