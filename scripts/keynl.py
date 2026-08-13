@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.3.1"
+VERSION = "4.3.2"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -639,7 +639,7 @@ def cmd_chain():
         import urllib.request
         payload = json.dumps({"hash": data_hash, "emojis": "".join(emojis)}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
-            data=payload, headers={"Content-Type": "application/json"})
+            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
         if resp.get("url"):
             print(f"✅ 已上链: {resp['url']}")
@@ -714,7 +714,7 @@ def cmd_chain_file():
         import urllib.request
         payload = json.dumps({"hash": file_hash, "emojis": "".join(emojis)}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
-            data=payload, headers={"Content-Type": "application/json"})
+            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
         if resp.get("url"):
             print(f"✅ 已上链: {resp['url']}")
@@ -751,7 +751,7 @@ def cmd_mychain():
     import urllib.request
     print("⏳ 查询链上记录...")
     try:
-        req = urllib.request.Request("https://furrynaling.com/api/chain/list")
+        req = urllib.request.Request("https://furrynaling.com/api/chain/list", headers={"User-Agent": "agent-keynl/4.3"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
         items = resp.get("items", [])
         if not items:
@@ -770,7 +770,7 @@ def cmd_mychain():
                 full_hash = items[i]["full_hash"]
                 payload = json.dumps({"hash": full_hash}).encode()
                 req2 = urllib.request.Request("https://furrynaling.com/api/chain/delete",
-                    data=payload, headers={"Content-Type": "application/json"})
+                    data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
                 r2 = json.loads(urllib.request.urlopen(req2, timeout=10).read().decode())
                 if r2.get("success"):
                     print(f"✅ 已抹除: {items[i]['emojis']}")
