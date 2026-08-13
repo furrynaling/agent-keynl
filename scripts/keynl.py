@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.10.0"
+VERSION = "4.11.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -87,6 +87,14 @@ def get_env_id():
     """环境标识（环境密钥哈希前16位），用于链上身份绑定"""
     env_key = get_env_key()
     return hashlib.sha256(b"keynl-envid:" + env_key).hexdigest()[:16]
+
+def get_auth_token():
+    """生成/读取上链认证令牌（绑定环境密钥，防陌生人上传）"""
+    cfg = load_config()
+    if "auth_token" not in cfg:
+        cfg["auth_token"] = secrets.token_hex(32)
+        save_config(cfg)
+    return cfg["auth_token"]
 
 def log_access(action="解密"):
     """记录一次成功解密（60秒内去重）"""
@@ -793,7 +801,7 @@ def cmd_chain():
     print("⏳ 上传服务器...")
     try:
         import urllib.request
-        payload = json.dumps({"hash": data_hash, "emojis": "".join(emojis), "env_id": get_env_id()}).encode()
+        payload = json.dumps({"hash": data_hash, "emojis": "".join(emojis), "env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
             data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
@@ -923,7 +931,7 @@ def cmd_chain_file():
     print("⏳ 上传服务器...")
     try:
         import urllib.request
-        payload = json.dumps({"hash": file_hash, "emojis": "".join(emojis), "env_id": get_env_id()}).encode()
+        payload = json.dumps({"hash": file_hash, "emojis": "".join(emojis), "env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
             data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
@@ -966,7 +974,7 @@ def cmd_access_audit():
     print("⏳ 上链...")
     try:
         import urllib.request
-        payload = json.dumps({"hash": h, "emojis": "".join(emojis), "env_id": get_env_id()}).encode()
+        payload = json.dumps({"hash": h, "emojis": "".join(emojis), "env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
             data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.7"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
@@ -1049,7 +1057,7 @@ def cmd_mychain():
         for i in idxs:
             if 0 <= i < len(items):
                 full_hash = items[i]["full_hash"]
-                payload = json.dumps({"hash": full_hash, "env_id": get_env_id()}).encode()
+                payload = json.dumps({"hash": full_hash, "env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
                 req2 = urllib.request.Request("https://furrynaling.com/api/chain/delete",
                     data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
                 r2 = json.loads(urllib.request.urlopen(req2, timeout=10).read().decode())
