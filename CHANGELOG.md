@@ -130,7 +130,7 @@
 ### 新增
 - **跨平台支持**：Windows / Linux / Android(Termux) 三平台
 - **install.ps1**：Windows 一键安装脚本
-- **默认路径适配**：Linux `~/.secret-management` · Windows `%APPDATA%\secret-management` · Termux `~/.secret-management`
+- **默认路径适配**：Linux `~/.agent-keynl` · Windows `%APPDATA%\agent-keynl` · Termux `~/.agent-keynl`
 
 ### 改动
 - **scrypt 替代 Argon2**：用 Python 内置 `hashlib.scrypt` 替代 `argon2-cffi`，消除编译依赖，安装不再卡住
@@ -151,7 +151,7 @@
 - **一键安装**：`curl install.sh | bash`
 
 ### 改动
-- 去品牌化：`祈棂密钥库` → `secret-management`
+- 去品牌化：`祈棂密钥库` → `agent-keynl`
 
 ---
 

@@ -1,5 +1,5 @@
 ---
-name: secret-management
+name: agent-keynl
 description: "七层加密密钥库。在Linux服务器上安全存储API Key、SMTP密码、云平台凭证、CA私钥等敏感信息。核心能力：scrypt内存密集型密钥派生（抗GPU/ASIC暴力破解）、硬件指纹绑定（MAC+机器ID+主机名+内核，密文复制到其他服务器即失效）、Shamir(3,5)门限分片（多钥匙恢复）、假文件完整性校验（删错诱饵文件即锁死）、伪装成Node.js项目目录（社会工程防护）、mlock内存锁（防swap泄漏）。当需要存储/读取/轮换密钥、搭建加密保险库、防范密钥泄露或勒索病毒时触发。"
 allowed-tools: Bash Read Write Edit
 when_to_use: "需要安全存储API密钥/密码/凭证时；搭建密钥保险库时；担心服务器被入侵后密钥泄露时；需要多钥匙恢复机制时；防范密钥被复制到其他服务器时。"
@@ -9,7 +9,7 @@ metadata:
   last_updated: "2026-08-13"
 ---
 
-# secret-management (secret-management)
+# agent-keynl (agent-keynl)
 
 ## 定位：密钥保险库，不是密码管理器
 

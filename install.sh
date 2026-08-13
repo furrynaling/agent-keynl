@@ -1,8 +1,8 @@
 #!/bin/bash
-# secret-management 一键安装脚本
+# agent-keynl 一键安装脚本
 set -e
 
-echo "🔐 正在安装 secret-management..."
+echo "🔐 正在安装 agent-keynl..."
 
 # 1. 检查 Python
 if ! command -v python3 &>/dev/null; then
@@ -20,7 +20,7 @@ pip3 install cryptography 2>&1 | tail -3 || {
 # 3. 下载 keynl（用 mktemp 跨平台临时文件）
 echo "⬇️ 下载 keynl..."
 TMPFILE=$(mktemp)
-curl -fsSL "https://raw.githubusercontent.com/furrynaling/secret-management/main/scripts/keynl.py" -o "$TMPFILE"
+curl -fsSL "https://raw.githubusercontent.com/furrynaling/agent-keynl/main/scripts/keynl.py" -o "$TMPFILE"
 
 # 4. 安装路径判断
 #    Termux: $PREFIX/bin（一定在 PATH 里）

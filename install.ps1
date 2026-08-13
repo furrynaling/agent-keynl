@@ -1,6 +1,6 @@
-# secret-management Windows 一键安装
+# agent-keynl Windows 一键安装
 # PowerShell 运行: irm https://.../install.ps1 | iex
-Write-Host "🔐 正在安装 secret-management (Windows)..."
+Write-Host "🔐 正在安装 agent-keynl (Windows)..."
 
 # 1. 检查 Python
 if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
@@ -14,9 +14,9 @@ pip install cryptography 2>&1 | Select-Object -Last 2
 
 # 3. 下载 keynl.py
 Write-Host "⬇️ 下载 keynl..."
-$installDir = Join-Path $env:APPDATA "secret-management"
+$installDir = Join-Path $env:APPDATA "agent-keynl"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/furrynaling/secret-management/main/scripts/keynl.py" `
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/furrynaling/agent-keynl/main/scripts/keynl.py" `
     -OutFile (Join-Path $installDir "keynl.py") -UseBasicParsing
 
 # 4. 创建 wrapper 脚本

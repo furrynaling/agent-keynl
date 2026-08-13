@@ -1,4 +1,4 @@
-<h1 align="center">🔐 secret-management · 给 AI Agent 的密码本</h1>
+<h1 align="center">🔐 agent-keynl · 给 AI Agent 的密码本</h1>
 
 <p align="center">
   <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/📜-更新日志-8B5CF6?style=flat-square" alt="更新日志"></a>
@@ -112,13 +112,13 @@ AI: "好的，已配置"
 **Linux / macOS / Termux：**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/furrynaling/secret-management/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/furrynaling/agent-keynl/main/install.sh | bash
 ```
 
 **Windows（PowerShell）：**
 
 ```powershell
-irm https://raw.githubusercontent.com/furrynaling/secret-management/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/furrynaling/agent-keynl/main/install.ps1 | iex
 ```
 
 **首次使用：**
@@ -154,7 +154,7 @@ AI 会做的:
 ## 📁 项目结构
 
 ```
-secret-management/
+agent-keynl/
 ├── SKILL.md          ← AI 技能定义
 ├── README.md         ← 本文件
 ├── install.sh        ← Linux/macOS/Termux 一键安装

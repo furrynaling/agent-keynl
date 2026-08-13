@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""secret-management v3.3 · scrypt + HSM + Shamir + 跨平台 + 交互菜单"""
+"""agent-keynl v3.3 · scrypt + HSM + Shamir + 跨平台 + 交互菜单"""
 import os, sys, json, hashlib, base64, getpass, secrets, platform, ctypes
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
@@ -13,8 +13,8 @@ def default_base_dir():
         return os.environ["KEYNL_DIR"]
     home = os.path.expanduser("~")
     if platform.system() == "Windows":
-        return os.path.join(os.environ.get("APPDATA", home), "secret-management")
-    return os.path.join(home, ".secret-management")
+        return os.path.join(os.environ.get("APPDATA", home), "agent-keynl")
+    return os.path.join(home, ".agent-keynl")
 
 BASE_DIR = default_base_dir()
 os.makedirs(BASE_DIR, exist_ok=True)
@@ -341,13 +341,13 @@ def cmd_authorize():
     print("✅ 已授权，本次终端窗口内免密操作")
 
 def cmd_about():
-    print(f"🔐 secret-management v{VERSION}")
+    print(f"🔐 agent-keynl v{VERSION}")
     print("   一个给 AI Agent 的加密密码本")
     print("")
     print("   作者: 纳棂")
     print("   邮箱: furrynaling@outlook.com")
     print("   网站: furrynaling.com · naling.net")
-    print("   仓库: github.com/furrynaling/secret-management")
+    print("   仓库: github.com/furrynaling/agent-keynl")
 
 def cmd_add():
     password = _get_password()
@@ -502,7 +502,7 @@ def cmd_update():
     print("🔍 检查更新...")
     try:
         import urllib.request, re, shutil
-        url = "https://raw.githubusercontent.com/furrynaling/secret-management/main/scripts/keynl.py"
+        url = "https://raw.githubusercontent.com/furrynaling/agent-keynl/main/scripts/keynl.py"
         req = urllib.request.Request(url, headers={"User-Agent": "keynl-update"})
         latest_code = urllib.request.urlopen(req, timeout=10).read().decode()
         m = re.search(r'VERSION = "([^"]+)"', latest_code)
@@ -782,7 +782,7 @@ def cmd_mychain():
 def print_status():
     hsm_type, hsm_desc = detect_hsm()
     cfg = load_config()
-    print(f"🔐 secret-management v{VERSION}")
+    print(f"🔐 agent-keynl v{VERSION}")
     print(f"   平台: {platform.system()} ({platform.machine()})")
     print(f"   HSM适配: {hsm_type} ({hsm_desc})")
     print(f"   加密强度: scrypt n={cfg.get('scrypt_n', 2**14)}")
@@ -796,7 +796,7 @@ def print_status():
 
 # ===== 交互式菜单 =====
 MENU = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔐 secret-management 主菜单
+🔐 agent-keynl 主菜单
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   1. 设置主密码       2. 存密钥
   3. 读密钥          4. 列出所有密钥
@@ -852,7 +852,7 @@ if __name__ == "__main__":
         sys.exit(0)
     cmd, args = sys.argv[1], sys.argv[2:]
     if cmd in ("-v", "--version", "version", "-V"):
-        print(f"secret-management v{VERSION}")
+        print(f"agent-keynl v{VERSION}")
     elif cmd == "setpass":
         cmd_setpass()
     elif cmd == "changepass":
