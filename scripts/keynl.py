@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """agent-keynl v3.3 · scrypt + HSM + Shamir + 跨平台 + 交互菜单"""
-import os, sys, json, hashlib, base64, getpass, secrets, platform, ctypes
+import os, sys, json, hashlib, base64, getpass, secrets, platform, ctypes, time
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.6.2"
+VERSION = "4.7.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -24,6 +24,7 @@ HW_FILE = os.environ.get("KEYNL_HW", os.path.join(BASE_DIR, "hw.bin"))
 SHAMIR_DIR = os.environ.get("KEYNL_SHARDS", os.path.join(BASE_DIR, "shards"))
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 ENV_KEY_FILE = os.path.join(BASE_DIR, "env.key")
+ACCESS_LOG = os.path.join(BASE_DIR, "access.log")
 
 # ===== 配置文件（加密强度 + 分片方案） =====
 DEFAULT_CONFIG = {"scrypt_n": 2**14, "scrypt_r": 8, "shard_n": 5, "shard_k": 3}
@@ -77,6 +78,23 @@ def hash_to_emoji(hash_hex, count=8):
         idx = int(hash_hex[i], 16)
         result += EMOJI_TABLE[idx]
     return result
+
+# ===== 解密审计日志 =====
+_last_access = [0.0]
+
+def log_access(action="解密"):
+    """记录一次成功解密（60秒内去重）"""
+    global _last_access
+    now = time.time()
+    if now - _last_access[0] < 60:
+        return
+    _last_access[0] = now
+    ts = time.strftime('%Y-%m-%d %H:%M:%S')
+    try:
+        with open(ACCESS_LOG, 'a') as f:
+            f.write(f"{ts} | {action} | {platform.node()}\n")
+    except:
+        pass
 
 # ===== 跨平台硬件指纹 =====
 def _sh(s, maxlen=16):
@@ -278,6 +296,7 @@ def load_vault(password):
     if data.pop('_ecc_fp','') != get_ecc_fp(): raise Exception("❌ ECC指纹不匹配!")
     if data.pop('_sha384','') != hashlib.sha384(json.dumps({k:v for k,v in data.items() if not k.startswith('_')}, sort_keys=True).encode()).hexdigest():
         raise Exception("❌ 完整性校验失败!")
+    log_access()
     return {k:v for k,v in data.items() if not k.startswith('_')}
 
 def save_vault(password, data):
@@ -910,6 +929,36 @@ def cmd_chain_file():
     except Exception as e:
         print(f"❌ 上传失败: {str(e)[:60]}")
 
+def cmd_access_audit():
+    """解密审计：查看解密记录 + 可选上链存证"""
+    if not os.path.exists(ACCESS_LOG):
+        print("📭 无解密记录（尚未成功解密过）"); return
+    lines = open(ACCESS_LOG).read().strip().split('\n')
+    print(f"共 {len(lines)} 次解密记录:")
+    for line in lines[-20:]:
+        print(f"  {line}")
+    print()
+    choice = input("将解密日志上链存证? (y/n): ").strip().lower()
+    if choice != 'y':
+        return
+    h = hashlib.sha256(open(ACCESS_LOG, 'rb').read()).hexdigest()
+    emojis = hash_to_emoji(h)
+    print(f"日志哈希: {h}")
+    print(f"表情: {' '.join(emojis)}")
+    print("⏳ 上链...")
+    try:
+        import urllib.request
+        payload = json.dumps({"hash": h, "emojis": "".join(emojis)}).encode()
+        req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
+            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.7"})
+        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
+        if resp.get("url"):
+            print(f"✅ 解密日志已上链: {resp['url']}")
+        else:
+            print(f"⚠️ {resp.get('error', '上链失败')}")
+    except Exception as e:
+        print(f"❌ 上链失败: {str(e)[:60]}")
+
 def cmd_ots_verify():
     """验证 OTS 时间戳证明（需本机 ots CLI 或在线）"""
     import shutil, subprocess
@@ -992,7 +1041,7 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   15. 导出API给AI     16. 上链校验
   17. 泄露查询        18. 抹除式更新
   19. 我的链上密钥     20. 文件上链
-  21. 验证OTS存证
+  21. 验证OTS存证     22. 解密审计
   a. 重新列出菜单表   b. 固定菜单表
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
@@ -1004,7 +1053,7 @@ def interactive_menu():
     print(MENU)
     while True:
         try:
-            choice = input("请选择 [0-21, a重列菜单, b固定菜单]: ").strip().lower()
+            choice = input("请选择 [0-22, a重列菜单, b固定菜单]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -1037,6 +1086,7 @@ def interactive_menu():
         elif choice == "19": cmd_mychain()
         elif choice == "20": cmd_chain_file()
         elif choice == "21": cmd_ots_verify()
+        elif choice == "22": cmd_access_audit()
         else: print("❌ 无效选择")
         print()
         if FIXED_MENU:
@@ -1081,6 +1131,8 @@ if __name__ == "__main__":
         cmd_chain_file()
     elif cmd == "ots-verify":
         cmd_ots_verify()
+    elif cmd == "access-log":
+        cmd_access_audit()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
