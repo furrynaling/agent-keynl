@@ -16,7 +16,7 @@ pip install cryptography 2>&1 | Select-Object -Last 2
 Write-Host "⬇️ 下载 keymgr..."
 $installDir = Join-Path $env:APPDATA "secret-management"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/scripts/keymgr.py" `
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/furrynaling/secret-management/main/scripts/keymgr.py" `
     -OutFile (Join-Path $installDir "keymgr.py") -UseBasicParsing
 
 # 4. 创建 wrapper 脚本
