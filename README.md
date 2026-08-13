@@ -189,6 +189,16 @@ RUN chmod 700 /usr/local/bin/keymgr
 CMD ["python", "/usr/local/bin/keymgr", "status"]
 ```
 
+### 方式五：Termux / 安卓
+
+```bash
+# Termux 用包管理器预编译安装（避免 pip 源码编译卡住）
+pkg install python-cryptography
+
+# 然后一键安装
+curl -fsSL https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/install.sh | bash
+```
+
 ### 方式四：伪装部署（隐藏真实身份）
 
 把密钥库伪装成普通项目目录，真实密钥藏 `.keys/`：
