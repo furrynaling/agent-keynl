@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.7.0"
+VERSION = "4.8.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -82,6 +82,11 @@ def hash_to_emoji(hash_hex, count=8):
 # ===== 解密审计日志 =====
 _last_access = [0.0]
 
+def get_env_id():
+    """环境标识（环境密钥哈希前16位），用于链上身份绑定"""
+    env_key = get_env_key()
+    return hashlib.sha256(b"keynl-envid:" + env_key).hexdigest()[:16]
+
 def log_access(action="解密"):
     """记录一次成功解密（60秒内去重）"""
     global _last_access
@@ -90,9 +95,12 @@ def log_access(action="解密"):
         return
     _last_access[0] = now
     ts = time.strftime('%Y-%m-%d %H:%M:%S')
+    record = f"{ts} | {action} | {platform.node()}"
     try:
-        with open(ACCESS_LOG, 'a') as f:
-            f.write(f"{ts} | {action} | {platform.node()}\n")
+        f = _shard_fernet()
+        encrypted = base64.b64encode(f.encrypt(record.encode())).decode()
+        with open(ACCESS_LOG, 'a') as fh:
+            fh.write(encrypted + "\n")
     except:
         pass
 
@@ -784,7 +792,7 @@ def cmd_chain():
     print("⏳ 上传服务器...")
     try:
         import urllib.request
-        payload = json.dumps({"hash": data_hash, "emojis": "".join(emojis)}).encode()
+        payload = json.dumps({"hash": data_hash, "emojis": "".join(emojis), "env_id": get_env_id()}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
             data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
@@ -807,8 +815,8 @@ def cmd_query():
     import urllib.request
     print("⏳ 拉取链上记录...")
     try:
-        req = urllib.request.Request("https://furrynaling.com/api/chain/list",
-            headers={"User-Agent": "agent-keynl/4.6"})
+        req = urllib.request.Request(f"https://furrynaling.com/api/chain/list?env_id={get_env_id()}",
+            headers={"User-Agent": "agent-keynl/4.8"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
         items = resp.get("items", [])
         if not items:
@@ -914,7 +922,7 @@ def cmd_chain_file():
     print("⏳ 上传服务器...")
     try:
         import urllib.request
-        payload = json.dumps({"hash": file_hash, "emojis": "".join(emojis)}).encode()
+        payload = json.dumps({"hash": file_hash, "emojis": "".join(emojis), "env_id": get_env_id()}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
             data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
@@ -933,7 +941,16 @@ def cmd_access_audit():
     """解密审计：查看解密记录 + 可选上链存证"""
     if not os.path.exists(ACCESS_LOG):
         print("📭 无解密记录（尚未成功解密过）"); return
-    lines = open(ACCESS_LOG).read().strip().split('\n')
+    f = _shard_fernet()
+    lines = []
+    for line in open(ACCESS_LOG):
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            lines.append(f.decrypt(base64.b64decode(line)).decode())
+        except:
+            lines.append("（无法解密，非本环境记录）")
     print(f"共 {len(lines)} 次解密记录:")
     for line in lines[-20:]:
         print(f"  {line}")
@@ -948,7 +965,7 @@ def cmd_access_audit():
     print("⏳ 上链...")
     try:
         import urllib.request
-        payload = json.dumps({"hash": h, "emojis": "".join(emojis)}).encode()
+        payload = json.dumps({"hash": h, "emojis": "".join(emojis), "env_id": get_env_id()}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
             data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.7"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
@@ -983,7 +1000,7 @@ def cmd_mychain():
     import urllib.request
     print("⏳ 查询链上记录...")
     try:
-        req = urllib.request.Request("https://furrynaling.com/api/chain/list", headers={"User-Agent": "agent-keynl/4.3"})
+        req = urllib.request.Request(f"https://furrynaling.com/api/chain/list?env_id={get_env_id()}", headers={"User-Agent": "agent-keynl/4.8"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
         items = resp.get("items", [])
         if not items:
@@ -1001,7 +1018,7 @@ def cmd_mychain():
         for i in idxs:
             if 0 <= i < len(items):
                 full_hash = items[i]["full_hash"]
-                payload = json.dumps({"hash": full_hash}).encode()
+                payload = json.dumps({"hash": full_hash, "env_id": get_env_id()}).encode()
                 req2 = urllib.request.Request("https://furrynaling.com/api/chain/delete",
                     data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
                 r2 = json.loads(urllib.request.urlopen(req2, timeout=10).read().decode())
