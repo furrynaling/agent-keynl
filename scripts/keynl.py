@@ -784,18 +784,54 @@ def cmd_chain():
         print(f"❌ 上传失败(服务器链端点未部署): {str(e)[:60]}")
 
 def cmd_query():
-    """泄露查询：显示本地表情 + 链上页面链接"""
-    password = _get_password()
-    data = _load_safe(password)
-    if data is None: return
-    if not data:
-        print("❌ 密钥库为空"); return
-    data_str = json.dumps(data, sort_keys=True, ensure_ascii=False)
-    data_hash = hashlib.sha256(data_str.encode()).hexdigest()
-    emojis = hash_to_emoji(data_hash)
-    print("本地表情: " + " ".join(emojis))
-    print(f"链上页面: https://furrynaling.com/chain/{data_hash[:32]}.html")
-    print("打开页面比对表情，判断数据是否被篡改")
+    """泄露查询：列出上链记录，选择一条查询/比对"""
+    import urllib.request
+    print("⏳ 拉取链上记录...")
+    try:
+        req = urllib.request.Request("https://furrynaling.com/api/chain/list",
+            headers={"User-Agent": "agent-keynl/4.6"})
+        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
+        items = resp.get("items", [])
+        if not items:
+            print("📭 链上暂无记录，先用菜单16上链"); return
+        print(f"共 {len(items)} 条上链记录:")
+        for i, it in enumerate(items, 1):
+            print(f"  {i}. {it['emojis']}  ({it['hash']}) {it['created_at']}")
+        print()
+        choice = input("选择要查询的编号(回车=对比本地当前数据): ").strip()
+        if choice:
+            try:
+                idx = int(choice) - 1
+                if 0 <= idx < len(items):
+                    it = items[idx]
+                    print(f"链上表情: {it['emojis']}")
+                    print(f"链上页面: https://furrynaling.com/chain/{it['full_hash'][:32]}.html")
+                    print(f"上链时间: {it['created_at']}")
+                    password = _get_password()
+                    data = _load_safe(password)
+                    if data is not None and data:
+                        data_hash = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+                        local_emojis = "".join(hash_to_emoji(data_hash))
+                        print(f"本地表情: {' '.join(hash_to_emoji(data_hash))}")
+                        if local_emojis == it['emojis']:
+                            print("✅ 表情一致，数据安全")
+                        else:
+                            print("⚠️ 表情不一致，本地数据可能已变动")
+                else:
+                    print("❌ 编号无效")
+            except:
+                print("❌ 格式错误")
+        else:
+            password = _get_password()
+            data = _load_safe(password)
+            if data is None: return
+            if not data:
+                print("❌ 密钥库为空"); return
+            data_hash = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
+            print(f"本地表情: {' '.join(hash_to_emoji(data_hash))}")
+            print(f"链上页面: https://furrynaling.com/chain/{data_hash[:32]}.html")
+    except Exception as e:
+        print(f"❌ 查询失败(链服务器未部署): {str(e)[:60]}")
 
 def cmd_wipe():
     """抹除式更新：删除本地所有密钥，用于版本过低/不许可更新的强制重置"""
@@ -821,20 +857,35 @@ def cmd_wipe():
     print(f"✅ 已抹除 {removed} 个文件，重新运行 keynl 初始化")
 
 def cmd_chain_file():
-    """任意文件上链校验"""
-    path = input("文件路径: ").strip()
+    """任意文件/文件夹上链校验"""
+    path = input("文件或文件夹路径: ").strip()
     if not path or not os.path.exists(path):
-        print("❌ 文件不存在"); return
+        print("❌ 路径不存在"); return
     h = hashlib.sha256()
     try:
-        with open(path, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
-                h.update(chunk)
+        if os.path.isdir(path):
+            files = []
+            for root, dirs, fs in os.walk(path):
+                for f in fs:
+                    files.append(os.path.join(root, f))
+            files.sort()
+            for fp in files:
+                rel = os.path.relpath(fp, path)
+                h.update(rel.encode())
+                with open(fp, 'rb') as f:
+                    for chunk in iter(lambda: f.read(8192), b''):
+                        h.update(chunk)
+            desc = f"文件夹 {os.path.basename(path)} ({len(files)}个文件)"
+        else:
+            with open(path, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    h.update(chunk)
+            desc = f"文件 {os.path.basename(path)}"
     except Exception as e:
         print(f"❌ 读取失败: {e}"); return
     file_hash = h.hexdigest()
     emojis = hash_to_emoji(file_hash)
-    print(f"文件: {os.path.basename(path)}")
+    print(f"对象: {desc}")
     print(f"原始哈希: {file_hash}")
     print(f"表情: {' '.join(emojis)}")
     print("⏳ 上传服务器...")
