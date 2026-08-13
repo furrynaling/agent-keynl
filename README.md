@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <sub>Argon2id 派生 · HSM/TPM 硬件绑定 · SHA-384 完整性 · Fernet AES · ECC P-384 · 假文件校验 · 内存锁</sub>
+  <sub>scrypt 派生 · HSM/TPM 硬件绑定 · SHA-384 完整性 · Fernet AES · ECC P-384 · 假文件校验 · 内存锁</sub>
 </p>
 
 <p align="center">
@@ -20,7 +20,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python">
-  <img src="https://img.shields.io/badge/Argon2id-KDF-22C55E?style=flat-square" alt="Argon2id">
+  <img src="https://img.shields.io/badge/scrypt-KDF-22C55E?style=flat-square" alt="scrypt">
   <img src="https://img.shields.io/badge/ECC-P--384-8B5CF6?style=flat-square" alt="ECC">
   <img src="https://img.shields.io/badge/Shamir-3--of--5-F59E0B?style=flat-square" alt="Shamir">
   <img src="https://img.shields.io/badge/HSM-TPM%2FKMS-EF4444?style=flat-square" alt="HSM">
@@ -57,7 +57,7 @@ secret-management 的答案：**把密钥埋进七层加密，并让密文离开
 
 | 层 | 技术 | 防什么 |
 |:---|:---|:---|
-| L1 | **Argon2id**（内存密集型 KDF） | 暴力破解、GPU/ASIC 并行攻击 |
+| L1 | **scrypt**（内存密集型 KDF） | 暴力破解、GPU/ASIC 并行攻击 |
 | L2 | **SHA-384** 完整性哈希 | 密文篡改、比特翻转 |
 | L3 | **硬件指纹绑定**（TPM/KMS/MAC+机器ID） | 密文复制到别的服务器 |
 | L4 | **Fernet AES**（AES-128-CBC + HMAC-SHA256） | 无密钥解密 |
@@ -120,7 +120,7 @@ echo "ebd7e7bfe19356be768f03ee6d252eab3069338688677bfa848f4d865549f5ad  keymgr.p
 
 ```bash
 # 1. 安装依赖
-pip install argon2-cffi cryptography
+pip install cryptography
 
 # 2. 部署脚本
 cp scripts/keymgr.py /usr/local/bin/keymgr
@@ -150,7 +150,7 @@ keymgr list
 ### 方式一：标准部署（推荐）
 
 ```bash
-pip install argon2-cffi cryptography
+pip install cryptography
 cp scripts/keymgr.py /usr/local/bin/keymgr
 chmod 700 /usr/local/bin/keymgr
 keymgr setpass
@@ -183,7 +183,7 @@ systemctl enable keymgr
 ```bash
 # Dockerfile
 FROM python:3.11-slim
-RUN pip install argon2-cffi cryptography
+RUN pip install cryptography
 COPY keymgr.py /usr/local/bin/keymgr
 RUN chmod 700 /usr/local/bin/keymgr
 CMD ["python", "/usr/local/bin/keymgr", "status"]
@@ -300,7 +300,7 @@ AI 学会后可以：
 |:---|:---|
 | 黑客拿到 root 权限 | ❌ 密文打不开，假文件陷阱锁死 |
 | 复制 vault.enc 到自家服务器 | ❌ 硬件指纹不匹配 |
-| 暴力破解主密码 | ❌ Argon2id 60万次迭代，10^28 年 |
+| 暴力破解主密码 | ❌ scrypt 内存硬函数，10^28 年 |
 | 篡改密文 | ❌ SHA-384 + HMAC 双重校验 |
 | 服务器被扫出 mytp 目录 | ⚠️ 但 10 个假文件少一个就锁死 |
 | 你误删假文件 | ✅ 重建文件 + 删 decoy.hash 可恢复 |

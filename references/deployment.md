@@ -4,15 +4,15 @@
 
 ```
 Python 3.11+
-依赖: argon2-cffi, cryptography
-内存: ≥ 128MB（Argon2id 需要 64MB）
+依赖: cryptography, cryptography
+内存: ≥ 128MB（scrypt 需要 64MB）
 ```
 
 ## 安装
 
 ```bash
 # 1. 安装依赖
-pip install argon2-cffi cryptography
+pip install cryptography cryptography
 
 # 2. 复制脚本
 cp scripts/keymgr.py /usr/local/bin/keymgr

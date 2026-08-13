@@ -1,6 +1,6 @@
 ---
 name: secret-management
-description: "七层加密密钥库。在Linux服务器上安全存储API Key、SMTP密码、云平台凭证、CA私钥等敏感信息。核心能力：Argon2id内存密集型密钥派生（抗GPU/ASIC暴力破解）、硬件指纹绑定（MAC+机器ID+主机名+内核，密文复制到其他服务器即失效）、Shamir(3,5)门限分片（多钥匙恢复）、假文件完整性校验（删错诱饵文件即锁死）、伪装成Node.js项目目录（社会工程防护）、mlock内存锁（防swap泄漏）。当需要存储/读取/轮换密钥、搭建加密保险库、防范密钥泄露或勒索病毒时触发。"
+description: "七层加密密钥库。在Linux服务器上安全存储API Key、SMTP密码、云平台凭证、CA私钥等敏感信息。核心能力：scrypt内存密集型密钥派生（抗GPU/ASIC暴力破解）、硬件指纹绑定（MAC+机器ID+主机名+内核，密文复制到其他服务器即失效）、Shamir(3,5)门限分片（多钥匙恢复）、假文件完整性校验（删错诱饵文件即锁死）、伪装成Node.js项目目录（社会工程防护）、mlock内存锁（防swap泄漏）。当需要存储/读取/轮换密钥、搭建加密保险库、防范密钥泄露或勒索病毒时触发。"
 allowed-tools: Bash Read Write Edit
 when_to_use: "需要安全存储API密钥/密码/凭证时；搭建密钥保险库时；担心服务器被入侵后密钥泄露时；需要多钥匙恢复机制时；防范密钥被复制到其他服务器时。"
 metadata:
@@ -35,7 +35,7 @@ metadata:
 
 | 层 | 技术 | 防什么 |
 |:---|:---|:---|
-| L1 | Argon2id（内存密集型 KDF） | 暴力破解、GPU/ASIC 并行攻击 |
+| L1 | scrypt（内存密集型 KDF） | 暴力破解、GPU/ASIC 并行攻击 |
 | L2 | SHA-384 完整性哈希 | 密文篡改 |
 | L3 | 硬件指纹绑定 | 密文复制到别的服务器 |
 | L4 | Fernet AES（AES-128-CBC+HMAC-SHA256） | 无密钥解密 |
@@ -56,7 +56,7 @@ metadata:
 ### Step 1: 环境准备
 
 ```bash
-pip install argon2-cffi cryptography
+pip install cryptography cryptography
 ```
 
 ### Step 2: 部署 keymgr
@@ -100,7 +100,7 @@ echo "主密码" | keymgr shards
 
 ## 关键决策
 
-- **Argon2id 而非 PBKDF2**：内存密集型，抗 GPU/ASIC 并行攻击
+- **scrypt 而非 PBKDF2**：内存密集型，抗 GPU/ASIC 并行攻击
 - **硬件绑定而非纯密码**：密文离开原服务器即失效
 - **Shamir(3,5) 而非单密码**：丢失 1-2 份分片仍可恢复，单份泄露无害
 - **假文件陷阱而非隐藏**：伪装成 Node 项目 + 删除诱饵文件即锁死
@@ -110,7 +110,7 @@ echo "主密码" | keymgr shards
 1. **换内核/换网卡** → 硬件指纹变化 → 解密失败。需提前重建 hw.bin
 2. **误删假文件** → 密钥库锁死。重建被删文件 + 删 decoy.hash 恢复
 3. **忘了主密码** → 无法恢复。必须用 Shamir 分片兜底
-4. **Argon2id 内存参数过高** → 1GB 小内存服务器 OOM。建议 memory_cost=65536（64MB）
+4. **scrypt 内存参数过高** → 1GB 小内存服务器 OOM。建议 memory_cost=65536（64MB）
 
 ## 参考资料
 

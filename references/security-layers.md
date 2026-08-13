@@ -2,25 +2,25 @@
 
 secret-management的七层防护，从最外层（暴力破解）到最内层（文件权限），层层递进。
 
-## L1 · Argon2id 密钥派生
+## L1 · scrypt 密钥派生
 
 **作用**：把主密码变成加密密钥。
 
 ```
 密码 "my_master_password"
-  ↓ Argon2id（time_cost=4, memory_cost=64MB, parallelism=2）
+  ↓ scrypt（time_cost=4, memory_cost=64MB, parallelism=2）
 密钥 [32字节]
 ```
 
-**为什么用 Argon2id 而非 PBKDF2/bcrypt？**
+**为什么用 scrypt 而非 PBKDF2/bcrypt？**
 
 | 算法 | 抗 GPU | 抗 ASIC | 内存占用 |
 |:---|:---|:---|:---|
 | PBKDF2 | ❌ | ❌ | 低 |
 | bcrypt | ⚠️ | ❌ | 低 |
-| **Argon2id** | ✅ | ✅ | 高（可调） |
+| **scrypt** | ✅ | ✅ | 高（可调） |
 
-Argon2id 强制每次派生占用固定内存（如 64MB），GPU/ASIC 无法通过并行大规模加速。
+scrypt 强制每次派生占用固定内存（如 64MB），GPU/ASIC 无法通过并行大规模加速。
 
 **攻击成本**：48 位随机密码 → 每次派生 0.5 秒 → 破解需 10^28 年。
 
@@ -110,7 +110,7 @@ keymgr      → chmod 700（仅 owner 可执行）
 
 ```
 攻击者尝试          → 撞哪层
-暴力破解密码        → L1 Argon2id
+暴力破解密码        → L1 scrypt
 篡改密文           → L2 SHA-384 + L4 HMAC
 复制到别的服务器    → L3 硬件指纹
 替换密文           → L5 ECC 签名

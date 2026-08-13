@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""secret-management v4 · Argon2id + HSM自动适配 + Shamir + mlock"""
+"""secret-management v4 · scrypt + HSM自动适配 + Shamir + mlock"""
 import os, sys, json, hashlib, base64, getpass, secrets
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-from argon2 import PasswordHasher
 import ctypes
 
 # 可配置路径（环境变量覆盖）
@@ -14,14 +13,12 @@ HW_FILE = os.environ.get("KEYMGR_HW", "/root/mytp/.keys/hw.bin")
 SHAMIR_DIR = os.environ.get("KEYMGR_SHARDS", "/root/mytp/.keys/shards")
 BASE_DIR = os.path.dirname(VAULT) or "/root/mytp/.keys"
 
-# ===== Argon2id 密码哈希 =====
-ph = PasswordHasher(time_cost=4, memory_cost=65536, parallelism=2, hash_len=32)
-
+# ===== scrypt 密码哈希（Python内置，免编译依赖） =====
 def derive_key(password):
-    """Argon2id → 内存密集型 → 抗ASIC/GPU"""
+    """scrypt → 内存密集型 → 抗ASIC/GPU"""
     salt = b"secret_management_kdf_salt_v4"
-    raw = ph.hash(password, salt=salt)
-    return base64.urlsafe_b64encode(hashlib.sha256(raw.encode()).digest())
+    raw = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
+    return base64.urlsafe_b64encode(raw)
 
 # ===== HSM / TPM 自动适配 =====
 def detect_hsm():
