@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """secret-management v5 · scrypt + HSM + Shamir + 跨平台(Win/Linux/Android)"""
+VERSION = "3.2.0"
 import os, sys, json, hashlib, base64, getpass, secrets, platform, ctypes
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
@@ -253,7 +254,7 @@ def cmd_changepass():
 
 def print_status():
     hsm_type, hsm_desc = detect_hsm()
-    print("🔐 secret-management v5")
+    print(f"🔐 secret-management v{VERSION}")
     print(f"   平台: {platform.system()} ({platform.machine()})")
     print(f"   HSM适配: {hsm_type} ({hsm_desc})")
     print(f"   硬件指纹: {get_hw_fingerprint()[:32]}...")
@@ -271,6 +272,8 @@ if __name__ == "__main__":
         cmd_changepass()
     elif cmd == "status":
         print_status()
+    elif cmd in ("-v", "--version", "version", "-V"):
+        print(f"secret-management v{VERSION}")
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
