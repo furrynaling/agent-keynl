@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.3.3"
+VERSION = "4.4.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -451,6 +451,99 @@ def cmd_recover():
     else:
         print(f"✅ 恢复的主密码: {shamir_recover(shares).decode()}")
 
+def _auto_recover():
+    """自动恢复：扫描分片目录自动恢复主密码"""
+    cfg = load_config()
+    k = cfg.get("shard_k", 3)
+    if not os.path.exists(SHAMIR_DIR):
+        print("❌ 无分片目录，先到菜单7生成分片"); return
+    files = sorted([f for f in os.listdir(SHAMIR_DIR) if f.endswith('.key')])
+    if len(files) < k:
+        print(f"❌ 分片不足（{len(files)}/{k}个）"); return
+    shares = {}
+    for f in files[:k]:
+        try:
+            d = json.load(open(os.path.join(SHAMIR_DIR, f)))
+            shares[int(d["id"])] = int(d["value"])
+            print(f"✅ 读取 {f}")
+        except:
+            print(f"⚠️ 跳过 {f}")
+    if len(shares) < k:
+        print(f"❌ 有效分片不足（{len(shares)}/{k}）"); return
+    print(f"✅ 恢复的主密码: {shamir_recover(shares).decode()}")
+
+def _add_backup():
+    """增加备用区：把分片备份到额外位置"""
+    import shutil
+    if not os.path.exists(SHAMIR_DIR):
+        print("❌ 无分片，先到菜单7生成分片"); return
+    files = [f for f in os.listdir(SHAMIR_DIR) if f.endswith('.key')]
+    if not files:
+        print("❌ 无分片"); return
+    print(f"当前 {len(files)} 个分片")
+    dest = input("备份到目录(如 /sdcard/backup 或 U盘路径): ").strip()
+    if not dest:
+        print("已取消"); return
+    try:
+        os.makedirs(dest, exist_ok=True)
+        count = 0
+        for f in files:
+            shutil.copy(os.path.join(SHAMIR_DIR, f), os.path.join(dest, f))
+            count += 1
+        print(f"✅ 已备份 {count} 个分片到 {dest}")
+        print("   ⚠️ 分片是解锁密码的钥匙，请妥善保管备份位置")
+    except Exception as e:
+        print(f"❌ 备份失败: {e}")
+
+def _delete_shards():
+    """删除区：删除指定分片"""
+    if not os.path.exists(SHAMIR_DIR):
+        print("❌ 无分片"); return
+    files = sorted([f for f in os.listdir(SHAMIR_DIR) if f.endswith('.key')])
+    if not files:
+        print("❌ 无分片"); return
+    for i, f in enumerate(files, 1):
+        print(f"  {i}. {f}")
+    print("⚠️ 删除分片会降低密码恢复能力")
+    choice = input("输入要删除的分片编号(逗号分隔)，回车取消: ").strip()
+    if not choice:
+        print("已取消"); return
+    try:
+        idxs = [int(x)-1 for x in choice.split(',') if x.strip()]
+    except:
+        print("❌ 格式错误"); return
+    for idx in idxs:
+        if 0 <= idx < len(files):
+            os.remove(os.path.join(SHAMIR_DIR, files[idx]))
+            print(f"✅ 已删除 {files[idx]}")
+
+def cmd_shards_manage():
+    """分片管理子菜单"""
+    while True:
+        print("━━━━ 分片管理 ━━━━")
+        print("  1. 自动恢复（扫描目录自动恢复）")
+        print("  2. 手动恢复（输入文件名）")
+        print("  3. 增加备用区（备份分片）")
+        print("  4. 删除区（删除分片）")
+        print("  0. 返回")
+        try:
+            choice = input("选择 [0-4]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print(); break
+        if choice == "0":
+            break
+        elif choice == "1":
+            _auto_recover()
+        elif choice == "2":
+            cmd_recover()
+        elif choice == "3":
+            _add_backup()
+        elif choice == "4":
+            _delete_shards()
+        else:
+            print("❌ 无效选择")
+        print()
+
 def cmd_set_strength():
     cfg = load_config()
     cur = cfg.get("scrypt_n", 2**14)
@@ -814,7 +907,7 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   1. 设置主密码       2. 存密钥
   3. 读密钥          4. 列出所有密钥
   5. 删除密钥        6. 修改主密码
-  7. 生成分片        8. 从分片恢复
+  7. 生成分片        8. 分片管理
   9. 修改加密强度     10. 修改分片数量
   11. 查看状态        12. 检查更新
   13. 授权窗口免密    14. 关于作者
@@ -842,7 +935,7 @@ def interactive_menu():
         elif choice == "6": cmd_changepass()
         elif choice == "7": 
             password = _get_password(); save_shards(password)
-        elif choice == "8": cmd_recover()
+        elif choice == "8": cmd_shards_manage()
         elif choice == "9": cmd_set_strength()
         elif choice == "10": cmd_set_shards()
         elif choice == "11": print_status()
@@ -916,6 +1009,8 @@ if __name__ == "__main__":
             save_shards(password)
         elif cmd == "recover":
             cmd_recover()
+        elif cmd == "shards-manage":
+            cmd_shards_manage()
         elif cmd == "delete" and args:
             data = load_vault(password)
             if args[0] in data: del data[args[0]]; save_vault(password, data); print(f"✅ {args[0]}")
