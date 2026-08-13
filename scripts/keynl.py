@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.4.0"
+VERSION = "4.6.1"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -796,7 +796,8 @@ def cmd_query():
             print("📭 链上暂无记录，先用菜单16上链"); return
         print(f"共 {len(items)} 条上链记录:")
         for i, it in enumerate(items, 1):
-            print(f"  {i}. {it['emojis']}  ({it['hash']}) {it['created_at']}")
+            print(f"  {i}. {it['emojis']}  {it['created_at']}")
+            print(f"     哈希: {it['full_hash']}")
         print()
         choice = input("选择要查询的编号(回车=对比本地当前数据): ").strip()
         if choice:
@@ -805,6 +806,7 @@ def cmd_query():
                 if 0 <= idx < len(items):
                     it = items[idx]
                     print(f"链上表情: {it['emojis']}")
+                    print(f"完整哈希: {it['full_hash']}")
                     print(f"链上页面: https://furrynaling.com/chain/{it['full_hash'][:32]}.html")
                     print(f"上链时间: {it['created_at']}")
                     password = _get_password()
@@ -938,7 +940,8 @@ def cmd_mychain():
             return
         print(f"共 {resp.get('count', len(items))} 条链上记录:")
         for i, it in enumerate(items, 1):
-            print(f"  {i}. {it['emojis']}  ({it['hash']}) {it['created_at']}")
+            print(f"  {i}. {it['emojis']}  {it['created_at']}")
+            print(f"     哈希: {it['full_hash']}")
         print()
         choice = input("输入要抹除的编号(逗号分隔，如 1,3)，直接回车取消: ").strip()
         if not choice:
