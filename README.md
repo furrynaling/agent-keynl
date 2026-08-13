@@ -1,6 +1,16 @@
 <h1 align="center">🔐 secret-management · 给 AI Agent 的密码本</h1>
 
 <p align="center">
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/📜-更新日志-8B5CF6?style=flat-square" alt="更新日志"></a>
+  <a href="SKILL.md"><img src="https://img.shields.io/badge/🧠-AI技能-22C55E?style=flat-square" alt="AI技能"></a>
+  <a href="references/deployment.md"><img src="https://img.shields.io/badge/📦-部署指南-3776AB?style=flat-square" alt="部署指南"></a>
+  <a href="references/security-layers.md"><img src="https://img.shields.io/badge/🛡️-七层防护-F59E0B?style=flat-square" alt="七层防护"></a>
+  <a href="references/shamir-sharing.md"><img src="https://img.shields.io/badge/🔀-分片方案-EF4444?style=flat-square" alt="分片方案"></a>
+  <a href="references/hardware-binding.md"><img src="https://img.shields.io/badge/📍-硬件绑定-10B981?style=flat-square" alt="硬件绑定"></a>
+  <a href="scripts/keynl.py"><img src="https://img.shields.io/badge/💻-源码-6B7280?style=flat-square" alt="源码"></a>
+</p>
+
+<p align="center">
   <strong>别再把密码发进聊天窗了。<br>一个加密的、硬件绑定的、AI 也能安全使用的密码本。</strong>
 </p>
 
