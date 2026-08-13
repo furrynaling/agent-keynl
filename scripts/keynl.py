@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.3.0"
+VERSION = "4.3.1"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
