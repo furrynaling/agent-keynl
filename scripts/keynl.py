@@ -828,7 +828,7 @@ def interactive_menu():
         elif choice == "5": cmd_delete()
         elif choice == "6": cmd_changepass()
         elif choice == "7": 
-            password = _input_password(); save_shards(password)
+            password = _get_password(); save_shards(password)
         elif choice == "8": cmd_recover()
         elif choice == "9": cmd_set_strength()
         elif choice == "10": cmd_set_shards()
