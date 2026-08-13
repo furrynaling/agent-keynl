@@ -67,8 +67,17 @@ def get_machine_id():
         elif sys == "Darwin":
             return os.popen("ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID").read().strip()
         else:
+            # Linux
             if os.path.exists('/etc/machine-id'):
                 return open('/etc/machine-id').read().strip()
+            # Android/Termux：优先设备唯一标识，而非 PREFIX（所有设备相同）
+            serial = os.popen("getprop ro.serialno 2>/dev/null").read().strip()
+            if serial and serial not in ("", "unknown", "UNKNOWN"):
+                return serial
+            aid = os.popen("settings get secure android_id 2>/dev/null").read().strip()
+            if aid and aid not in ("", "null", "unknown"):
+                return aid
+            # 最后回退（弱，仅兜底）
             return os.environ.get("PREFIX", "") or os.popen("getprop ro.serialno 2>/dev/null").read().strip()
     except:
         pass
@@ -97,6 +106,10 @@ def get_mac():
             out = os.popen("ip link show 2>/dev/null | grep 'link/ether' | head -1").read()
             if 'link/ether' in out:
                 return out.split()[1]
+            # Android 6+ 隐藏 MAC，尝试其他来源
+            out2 = os.popen("cat /sys/class/net/wlan0/address 2>/dev/null || cat /sys/class/net/eth0/address 2>/dev/null").read().strip()
+            if out2:
+                return out2
     except:
         pass
     return ""
