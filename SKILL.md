@@ -9,7 +9,7 @@ metadata:
   last_updated: "2026-08-13"
 ---
 
-# 祈棂密钥库 (secret-management)
+# secret-management (secret-management)
 
 ## 定位：密钥保险库，不是密码管理器
 
