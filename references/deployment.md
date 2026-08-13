@@ -15,21 +15,21 @@ Python 3.11+
 pip install cryptography cryptography
 
 # 2. 复制脚本
-cp scripts/keymgr.py /usr/local/bin/keymgr
-chmod 700 /usr/local/bin/keymgr
+cp scripts/keynl.py /usr/local/bin/keynl
+chmod 700 /usr/local/bin/keynl
 
 # 3. 验证
-keymgr   # 应显示硬件指纹
+keynl   # 应显示硬件指纹
 ```
 
 ## 首次使用
 
 ```bash
 # 初始化（自动采集硬件指纹）
-echo "你的主密码" | keymgr add first_key "test"
+echo "你的主密码" | keynl add first_key "test"
 
 # 验证
-echo "你的主密码" | keymgr list
+echo "你的主密码" | keynl list
 # 应输出: first_key: test
 ```
 
@@ -64,19 +64,19 @@ echo "你的主密码" | keymgr list
 
 ```bash
 # 存密钥
-echo "主密码" | keymgr add <key> <value>
+echo "主密码" | keynl add <key> <value>
 
 # 读密钥
-echo "主密码" | keymgr get <key>
+echo "主密码" | keynl get <key>
 
 # 列表
-echo "主密码" | keymgr list
+echo "主密码" | keynl list
 
 # 删除
-echo "主密码" | keymgr delete <key>
+echo "主密码" | keynl delete <key>
 
 # 生成分片
-echo "主密码" | keymgr shards
+echo "主密码" | keynl shards
 ```
 
 ## 故障恢复
@@ -91,7 +91,7 @@ echo 'module.exports={...}' > /root/mytp/src/config.js
 rm /root/mytp/.keys/decoy.hash
 
 # 3. 重新访问 → 自动重建校验
-echo "主密码" | keymgr list
+echo "主密码" | keynl list
 ```
 
 ### 忘了主密码
@@ -100,7 +100,7 @@ echo "主密码" | keymgr list
 
 ### 换服务器迁移
 
-1. 新服务器安装 keymgr
+1. 新服务器安装 keynl
 2. 用分片恢复主密码
 3. 新服务器重建 vault
 

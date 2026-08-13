@@ -5,12 +5,12 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "3.3.0"
+VERSION = "3.4.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
-    if os.environ.get("KEYMGR_DIR"):
-        return os.environ["KEYMGR_DIR"]
+    if os.environ.get("KEYNL_DIR"):
+        return os.environ["KEYNL_DIR"]
     home = os.path.expanduser("~")
     if platform.system() == "Windows":
         return os.path.join(os.environ.get("APPDATA", home), "secret-management")
@@ -18,10 +18,10 @@ def default_base_dir():
 
 BASE_DIR = default_base_dir()
 os.makedirs(BASE_DIR, exist_ok=True)
-VAULT = os.environ.get("KEYMGR_VAULT", os.path.join(BASE_DIR, "vault.enc"))
-ECC_KEY_FILE = os.environ.get("KEYMGR_ECC", os.path.join(BASE_DIR, "ecc.key"))
-HW_FILE = os.environ.get("KEYMGR_HW", os.path.join(BASE_DIR, "hw.bin"))
-SHAMIR_DIR = os.environ.get("KEYMGR_SHARDS", os.path.join(BASE_DIR, "shards"))
+VAULT = os.environ.get("KEYNL_VAULT", os.path.join(BASE_DIR, "vault.enc"))
+ECC_KEY_FILE = os.environ.get("KEYNL_ECC", os.path.join(BASE_DIR, "ecc.key"))
+HW_FILE = os.environ.get("KEYNL_HW", os.path.join(BASE_DIR, "hw.bin"))
+SHAMIR_DIR = os.environ.get("KEYNL_SHARDS", os.path.join(BASE_DIR, "shards"))
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
 
 # ===== 配置文件（加密强度 + 分片方案） =====
@@ -371,6 +371,30 @@ def cmd_set_shards():
     save_config(cfg)
     print(f"✅ 分片方案已改为 {k}-of-{n}")
 
+def cmd_update():
+    """检查并更新到最新版"""
+    print("🔍 检查更新...")
+    try:
+        import urllib.request, re, shutil
+        url = "https://raw.githubusercontent.com/furrynaling/secret-management/main/scripts/keynl.py"
+        req = urllib.request.Request(url, headers={"User-Agent": "keynl-update"})
+        latest_code = urllib.request.urlopen(req, timeout=10).read().decode()
+        m = re.search(r'VERSION = "([^"]+)"', latest_code)
+        if not m:
+            print("❌ 无法获取最新版本信息"); return
+        latest_ver = m.group(1)
+        if latest_ver == VERSION:
+            print(f"✅ 已是最新版本 v{VERSION}")
+            return
+        print(f"🆕 发现新版本 v{latest_ver}（当前 v{VERSION}）")
+        self_path = os.path.abspath(sys.argv[0])
+        shutil.copy(self_path, self_path + ".bak")
+        with open(self_path, 'w') as f:
+            f.write(latest_code)
+        print(f"✅ 已更新到 v{latest_ver}（旧版备份为 .bak，重启后生效）")
+    except Exception as e:
+        print(f"❌ 更新失败: {e}")
+
 def print_status():
     hsm_type, hsm_desc = detect_hsm()
     cfg = load_config()
@@ -398,6 +422,7 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   9. 修改加密强度
   10. 修改分片数量
   11. 查看状态
+  12. 检查更新
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
@@ -405,7 +430,7 @@ def interactive_menu():
     print(MENU)
     while True:
         try:
-            choice = input("请选择 [0-11]: ").strip()
+            choice = input("请选择 [0-12]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -422,6 +447,7 @@ def interactive_menu():
         elif choice == "9": cmd_set_strength()
         elif choice == "10": cmd_set_shards()
         elif choice == "11": print_status()
+        elif choice == "12": cmd_update()
         else: print("❌ 无效选择")
         print()
 
@@ -442,6 +468,8 @@ if __name__ == "__main__":
         cmd_set_strength()
     elif cmd == "shardcfg":
         cmd_set_shards()
+    elif cmd == "update":
+        cmd_update()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:

@@ -17,10 +17,10 @@ pip3 install cryptography 2>&1 | tail -3 || {
     pip3 install --user cryptography 2>&1 | tail -3
 }
 
-# 3. 下载 keymgr（用 mktemp 跨平台临时文件）
-echo "⬇️ 下载 keymgr..."
+# 3. 下载 keynl（用 mktemp 跨平台临时文件）
+echo "⬇️ 下载 keynl..."
 TMPFILE=$(mktemp)
-curl -fsSL "https://raw.githubusercontent.com/furrynaling/secret-management/main/scripts/keymgr.py" -o "$TMPFILE"
+curl -fsSL "https://raw.githubusercontent.com/furrynaling/secret-management/main/scripts/keynl.py" -o "$TMPFILE"
 
 # 4. 安装路径判断
 #    Termux: $PREFIX/bin（一定在 PATH 里）
@@ -28,23 +28,23 @@ curl -fsSL "https://raw.githubusercontent.com/furrynaling/secret-management/main
 #    无 root: ~/.local/bin（需要手动加 PATH）
 if [ -n "$PREFIX" ] && [ -d "$PREFIX/bin" ]; then
     # Termux 环境
-    mv "$TMPFILE" "$PREFIX/bin/keymgr"
-    chmod 700 "$PREFIX/bin/keymgr"
-    INSTALL_PATH="$PREFIX/bin/keymgr"
-    echo "📱 检测到 Termux，安装到 $PREFIX/bin/keymgr"
+    mv "$TMPFILE" "$PREFIX/bin/keynl"
+    chmod 700 "$PREFIX/bin/keynl"
+    INSTALL_PATH="$PREFIX/bin/keynl"
+    echo "📱 检测到 Termux，安装到 $PREFIX/bin/keynl"
 elif [ -w /usr/local/bin ] || command -v sudo &>/dev/null; then
-    sudo mv "$TMPFILE" /usr/local/bin/keymgr 2>/dev/null || mv "$TMPFILE" /usr/local/bin/keymgr
-    chmod 700 /usr/local/bin/keymgr
-    INSTALL_PATH="/usr/local/bin/keymgr"
+    sudo mv "$TMPFILE" /usr/local/bin/keynl 2>/dev/null || mv "$TMPFILE" /usr/local/bin/keynl
+    chmod 700 /usr/local/bin/keynl
+    INSTALL_PATH="/usr/local/bin/keynl"
 else
     mkdir -p "$HOME/.local/bin"
-    mv "$TMPFILE" "$HOME/.local/bin/keymgr"
-    chmod 700 "$HOME/.local/bin/keymgr"
-    INSTALL_PATH="$HOME/.local/bin/keymgr"
+    mv "$TMPFILE" "$HOME/.local/bin/keynl"
+    chmod 700 "$HOME/.local/bin/keynl"
+    INSTALL_PATH="$HOME/.local/bin/keynl"
     # 加 PATH
     grep -q '\.local/bin' "$HOME/.bashrc" 2>/dev/null || \
       echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.bashrc"
-    echo "⚠️ 安装到 ~/.local/bin/keymgr（已加入 PATH，重开终端生效）"
+    echo "⚠️ 安装到 ~/.local/bin/keynl（已加入 PATH，重开终端生效）"
 fi
 
 # 5. 验证 + 使用说明
@@ -57,15 +57,15 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo "📖 使用说明"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "  1. 设主密码:      keymgr setpass"
-echo "  2. 存密钥:        keymgr add <名称> <值>"
-echo "     例:            keymgr add cf_token \"cfat_xxx\""
-echo "  3. 读密钥:        keymgr get <名称>"
-echo "  4. 列出所有:      keymgr list"
-echo "  5. 删除密钥:      keymgr delete <名称>"
-echo "  6. 改密码:        keymgr changepass"
-echo "  7. 生成分片:      keymgr shards"
-echo "  8. 从分片恢复:    keymgr recover"
-echo "  9. 查看状态:      keymgr status"
+echo "  1. 设主密码:      keynl setpass"
+echo "  2. 存密钥:        keynl add <名称> <值>"
+echo "     例:            keynl add cf_token \"cfat_xxx\""
+echo "  3. 读密钥:        keynl get <名称>"
+echo "  4. 列出所有:      keynl list"
+echo "  5. 删除密钥:      keynl delete <名称>"
+echo "  6. 改密码:        keynl changepass"
+echo "  7. 生成分片:      keynl shards"
+echo "  8. 从分片恢复:    keynl recover"
+echo "  9. 查看状态:      keynl status"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

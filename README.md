@@ -56,12 +56,12 @@ AI: "好的，已配置"
 ### ✅ 正确做法：给 AI 一个密码本
 
 ```
-你: "keymgr setpass"          ← 设一次主密码
-你: "keymgr add db_pass"      ← AI 执行，密码走 getpass 输入，不进聊天窗
-你: "keymgr get db_pass"      ← AI 执行，密码只在本地解密，不回显给你看
+你: "keynl setpass"          ← 设一次主密码
+你: "keynl add db_pass"      ← AI 执行，密码走 getpass 输入，不进聊天窗
+你: "keynl get db_pass"      ← AI 执行，密码只在本地解密，不回显给你看
 ```
 
-| 对比 | 发聊天窗 | 密码本(keymgr) |
+| 对比 | 发聊天窗 | 密码本(keynl) |
 |:---|:---|:---|
 | 密码进聊天记录 | ❌ 进了 | ✅ 不进 |
 | 密码进 AI 训练数据 | ❌ 进了 | ✅ 不进 |
@@ -114,10 +114,10 @@ irm https://raw.githubusercontent.com/furrynaling/secret-management/main/install
 **首次使用：**
 
 ```bash
-keymgr setpass               # 设主密码（≥12位）
-keymgr add db_pass           # 存密码（密码走 getpass，不进聊天窗）
-keymgr get db_pass           # 读密码
-keymgr list                  # 列出所有（值自动脱敏 ***）
+keynl setpass               # 设主密码（≥12位）
+keynl add db_pass           # 存密码（密码走 getpass，不进聊天窗）
+keynl get db_pass           # 读密码
+keynl list                  # 列出所有（值自动脱敏 ***）
 ```
 
 ---
@@ -128,13 +128,13 @@ keymgr list                  # 列出所有（值自动脱敏 ***）
 
 ```
 AI 会做的:
-  keymgr setpass          设主密码
-  keymgr add <名> <值>    存密钥（密码走 getpass）
-  keymgr get <名>         读密钥（不回显到聊天窗）
-  keymgr list             列表
-  keymgr changepass       改密码
-  keymgr shards           生成分片
-  keymgr recover          从分片恢复
+  keynl setpass          设主密码
+  keynl add <名> <值>    存密钥（密码走 getpass）
+  keynl get <名>         读密钥（不回显到聊天窗）
+  keynl list             列表
+  keynl changepass       改密码
+  keynl shards           生成分片
+  keynl recover          从分片恢复
 ```
 
 **核心：AI 永远不把密码打出来，只用命令存取。**
@@ -149,7 +149,7 @@ secret-management/
 ├── README.md         ← 本文件
 ├── install.sh        ← Linux/macOS/Termux 一键安装
 ├── install.ps1       ← Windows 一键安装
-├── scripts/keymgr.py ← 核心代码
+├── scripts/keynl.py ← 核心代码
 └── references/       ← 详解文档
 ```
 

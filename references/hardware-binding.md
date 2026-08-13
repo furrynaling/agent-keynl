@@ -64,7 +64,7 @@ def get_hw_fingerprint():
 ## 查看当前适配
 
 ```bash
-keymgr status
+keynl status
 # HSM适配: tpm / cloud-kms / software
 ```
 
@@ -84,7 +84,7 @@ keymgr status
 
 需要迁移密钥库到新服务器时：
 
-1. 新服务器 `keymgr` 生成新指纹
+1. 新服务器 `keynl` 生成新指纹
 2. 用 Shamir 分片恢复主密码
 3. 新服务器用主密码重建 vault（自动绑定新指纹）
 

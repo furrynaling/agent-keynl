@@ -59,11 +59,11 @@ metadata:
 pip install cryptography cryptography
 ```
 
-### Step 2: 部署 keymgr
+### Step 2: 部署 keynl
 
 ```bash
-cp scripts/keymgr.py /usr/local/bin/keymgr
-chmod 700 /usr/local/bin/keymgr
+cp scripts/keynl.py /usr/local/bin/keynl
+chmod 700 /usr/local/bin/keynl
 ```
 
 ### Step 3: 硬件指纹初始化
@@ -79,21 +79,21 @@ chmod 700 /usr/local/bin/keymgr
 ### Step 4: 存储密钥
 
 ```bash
-echo "主密码" | keymgr add cf_token "cfat_xxx"
-echo "主密码" | keymgr add tc_secret "AKID_xxx"
+echo "主密码" | keynl add cf_token "cfat_xxx"
+echo "主密码" | keynl add tc_secret "AKID_xxx"
 ```
 
 ### Step 5: 读取密钥
 
 ```bash
-echo "主密码" | keymgr get cf_token
-echo "主密码" | keymgr list
+echo "主密码" | keynl get cf_token
+echo "主密码" | keynl list
 ```
 
 ### Step 6: Shamir 分片（可选，推荐）
 
 ```bash
-echo "主密码" | keymgr shards
+echo "主密码" | keynl shards
 ```
 
 生成 5 个分片，任意 3 个可恢复主密码。

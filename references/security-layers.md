@@ -101,7 +101,7 @@ ECC P-384 提供 192 位安全性，破解需 2^192 次计算。
 ```
 vault.enc   → chmod 600（仅 owner 可读）
 .keys/      → chmod 700（仅 owner 可进入）
-keymgr      → chmod 700（仅 owner 可执行）
+keynl      → chmod 700（仅 owner 可执行）
 ```
 
 即使攻击者拿到普通用户 shell，也无法读取密钥文件。

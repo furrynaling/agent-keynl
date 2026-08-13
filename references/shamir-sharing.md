@@ -50,7 +50,7 @@ Shamir Secret Sharing（沙米尔秘密共享）基于多项式插值：
 
 ```bash
 # 生成分片
-echo "主密码" | keymgr shards
+echo "主密码" | keynl shards
 
 # 输出 5 个文件
 /root/mytp/.keys/shards/
@@ -67,7 +67,7 @@ echo "主密码" | keymgr shards
 任意 3 个分片 → shamir_recover() → 主密码
 
 ```python
-from keymgr import shamir_recover
+from keynl import shamir_recover
 shares = {1: ..., 3: ..., 5: ...}  # 任意3个
 password = shamir_recover(shares).decode()
 ```
