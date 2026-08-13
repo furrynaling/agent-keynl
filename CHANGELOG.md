@@ -1,0 +1,72 @@
+# 更新日志
+
+本项目遵循 [语义化版本](https://semver.org/lang/zh-CN/) 规范。
+所有显著变更都会记录在此文件中。
+
+---
+
+## [3.2.0] - 2026-08-13
+
+### 修复
+- **Shamir 素数溢出**：`prime` 从 `2^127-1` 提升到 `2^521-1`，修复中文/长密码（>16字节）恢复乱码的严重 bug
+- **内核指纹不稳定**：`get_kernel()` 改用 `platform.release()`（稳定版本号），避免内核小更新导致硬件指纹变化、密钥库打不开
+- Shamir 分片增加长度检查（密码最多 65 字节）
+
+---
+
+## [3.1.0] - 2026-08-13
+
+### 新增
+- **跨平台支持**：Windows / Linux / Android(Termux) 三平台
+- **install.ps1**：Windows 一键安装脚本
+- **默认路径适配**：Linux `~/.secret-management` · Windows `%APPDATA%\secret-management` · Termux `~/.secret-management`
+
+### 改动
+- **scrypt 替代 Argon2**：用 Python 内置 `hashlib.scrypt` 替代 `argon2-cffi`，消除编译依赖，安装不再卡住
+- **ECC 惰性初始化**：不再模块加载时写文件（修复 Termux 只读文件系统报错）
+- 一键安装脚本改用 `mktemp` 跨平台临时文件
+
+### 修复
+- Termux 安装到 `$PREFIX/bin`（修复 `command not found`）
+- install.sh 增加完整使用说明
+
+---
+
+## [3.0.0] - 2026-08-13
+
+### 新增
+- **HSM 自动适配**：TPM 2.0 / 云 KMS / 软件指纹 三级自动检测
+- **密码管理命令**：`setpass`（设密码）、`changepass`（改密码）、`recover`（分片恢复）
+- **一键安装**：`curl install.sh | bash`
+
+### 改动
+- 去品牌化：`祈棂密钥库` → `secret-management`
+
+---
+
+## [2.0.0] - 2026-08-10
+
+### 新增
+- **Argon2id** 内存密集型密钥派生（抗 GPU/ASIC）
+- **Shamir(3,5)** 门限分片，任意 3 份恢复主密码
+- **mlock** 内存锁，防 swap 泄漏
+
+---
+
+## [1.0.0] - 2026-08-09
+
+### 新增
+- **七层加密**：scrypt/PBKDF2 + SHA-384 + 硬件绑定 + Fernet AES + ECC P-384 + 文件权限
+- **硬件指纹绑定**：MAC + 机器 ID + 主机名 + 内核版本
+- **假文件完整性校验**：删错诱饵文件即锁死
+- **伪装目录**：伪装成 Node.js 项目
+
+---
+
+## 版本号说明
+
+| 类型 | 说明 | 示例 |
+|:---|:---|:---|
+| 主版本号 | 不兼容的重大变更 | 3.x → 4.x |
+| 次版本号 | 向后兼容的新功能 | 3.1 → 3.2 |
+| 修订号 | 向后兼容的 bug 修复 | 3.1.1 |
