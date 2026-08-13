@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "3.5.0"
+VERSION = "3.6.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -313,10 +313,30 @@ def cmd_add():
     name = input("密钥名称: ").strip()
     if not name:
         print("❌ 名称不能为空"); return
-    val = getpass.getpass(f"🔑 {name} 的值: ")
-    data[name] = val
+    print("输入字段(格式 字段名=值，单字段可直接输入值，空行结束):")
+    fields = {}
+    first = input("  > ").strip()
+    if not first:
+        print("❌ 不能为空"); return
+    if '=' in first:
+        k, v = first.split('=', 1)
+        fields[k.strip()] = v.strip()
+        while True:
+            line = input("  > ").strip()
+            if not line: break
+            if '=' in line:
+                k2, v2 = line.split('=', 1)
+                fields[k2.strip()] = v2.strip()
+    else:
+        # 单字段
+        data[name] = first
+        save_vault(password, data)
+        print(f"✅ {name}")
+        return
+    # 多字段存 JSON
+    data[name] = json.dumps(fields, ensure_ascii=False)
     save_vault(password, data)
-    print(f"✅ {name}")
+    print(f"✅ {name} ({len(fields)}个字段)")
 
 def cmd_get():
     password = _get_password()
@@ -326,7 +346,15 @@ def cmd_get():
     val = data.get(name)
     if val is None:
         print("❌ 不存在")
-    else:
+        return
+    try:
+        fields = json.loads(val)
+        if isinstance(fields, dict):
+            for k, v in fields.items():
+                print(f"  {k} = {v}")
+        else:
+            print(f"{name} = {val}")
+    except:
         print(f"{name} = {val}")
 
 def cmd_list():
@@ -404,11 +432,22 @@ def cmd_set_shards():
     print("  2. 3-of-7")
     print("  3. 5-of-7")
     print("  4. 5-of-9")
-    choice = input("选择 [1-4]: ").strip()
+    print("  5. 自定义(输入 n,k)")
+    choice = input("选择 [1-5]: ").strip()
     mapping = {"1": (5,3), "2": (7,3), "3": (7,5), "4": (9,5)}
-    if choice not in mapping:
+    if choice == "5":
+        raw = input("输入总分片数n,门限k (如 7,3): ").strip()
+        try:
+            n, k = raw.split(',')
+            n, k = int(n), int(k)
+        except:
+            print("❌ 格式错误，用 n,k"); return
+        if k >= n or n < 2 or k < 2:
+            print("❌ 需满足 2 ≤ k < n"); return
+    elif choice in mapping:
+        n, k = mapping[choice]
+    else:
         print("❌ 无效选择"); return
-    n, k = mapping[choice]
     cfg["shard_n"] = n
     cfg["shard_k"] = k
     save_config(cfg)
@@ -437,6 +476,98 @@ def cmd_update():
         print(f"✅ 已更新到 v{latest_ver}（旧版备份为 .bak，重启后生效）")
     except Exception as e:
         print(f"❌ 更新失败: {e}")
+
+def cmd_export():
+    """导出加密 API 文件给 AI 调用"""
+    password = _get_password()
+    data = _load_safe(password)
+    if data is None: return
+    if not data:
+        print("❌ 密钥库为空"); return
+    print("可导出的密钥:")
+    keys = sorted(data.keys())
+    for i, k in enumerate(keys, 1):
+        v = data[k]
+        preview = "***" if len(v) > 15 else v
+        print(f"  {i}. {k} = {preview}")
+    choice = input("选择编号(逗号分隔，如 1,3): ").strip()
+    try:
+        idxs = [int(x)-1 for x in choice.split(',') if x.strip()]
+    except:
+        print("❌ 格式错误"); return
+    selected = {keys[i]: data[keys[i]] for i in idxs if 0 <= i < len(keys)}
+    if not selected:
+        print("❌ 未选中"); return
+    # 选加密类型
+    print("加密类型:")
+    print("  1. Fernet 随机密钥 (最安全，生成独立密钥)")
+    print("  2. 密码加密 (用主密码解密)")
+    enc_type = input("选择 [1-2]: ").strip()
+    api_name = input("API文件名(默认 api_key): ").strip() or "api_key"
+    export_dir = os.path.join(BASE_DIR, "export")
+    os.makedirs(export_dir, exist_ok=True)
+    api_file = os.path.join(export_dir, api_name + ".enc")
+    payload = json.dumps(selected, ensure_ascii=False).encode()
+    if enc_type == "1":
+        api_key = Fernet.generate_key()
+        f = Fernet(api_key)
+        encrypted = f.encrypt(payload)
+        with open(api_file, 'wb') as fh:
+            fh.write(encrypted)
+        print(f"✅ 已导出: file://{api_file}")
+        print(f"   🔑 API密钥(复制给AI): {api_key.decode()}")
+        print(f"   AI调用: keynl api-get {api_name} {api_key.decode()}")
+    elif enc_type == "2":
+        key = derive_key(password)
+        f = Fernet(key)
+        encrypted = f.encrypt(payload)
+        with open(api_file, 'wb') as fh:
+            fh.write(encrypted)
+        print(f"✅ 已导出: file://{api_file}")
+        print(f"   AI调用: keynl api-get {api_name}")
+    else:
+        print("❌ 无效选择")
+
+def cmd_api_get(args):
+    """解密读取导出的 API 文件"""
+    if not args:
+        print("用法: keynl api-get <API名> [API密钥]")
+        return
+    api_name = args[0]
+    export_dir = os.path.join(BASE_DIR, "export")
+    api_file = os.path.join(export_dir, api_name + ".enc")
+    if not os.path.exists(api_file):
+        print(f"❌ 文件不存在: {api_file}")
+        return
+    encrypted = open(api_file, 'rb').read()
+    if len(args) >= 2:
+        # Fernet 密钥解密
+        try:
+            f = Fernet(args[1].encode())
+            payload = f.decrypt(encrypted)
+        except Exception as e:
+            print(f"❌ API密钥错误"); return
+    else:
+        # 主密码解密
+        password = _get_password()
+        key = derive_key(password)
+        f = Fernet(key)
+        try:
+            payload = f.decrypt(encrypted)
+        except:
+            print("❌ 主密码错误"); return
+    selected = json.loads(payload)
+    for k, v in selected.items():
+        try:
+            fields = json.loads(v)
+            if isinstance(fields, dict):
+                print(f"  {k}:")
+                for k2, v2 in fields.items():
+                    print(f"    {k2} = {v2}")
+                continue
+        except:
+            pass
+        print(f"  {k} = {v}")
 
 def print_status():
     hsm_type, hsm_desc = detect_hsm()
@@ -470,6 +601,7 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   12. 检查更新
   13. 授权本次窗口免密
   14. 关于作者
+  15. 导出API(给AI用)
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
@@ -477,7 +609,7 @@ def interactive_menu():
     print(MENU)
     while True:
         try:
-            choice = input("请选择 [0-14]: ").strip()
+            choice = input("请选择 [0-15]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -497,6 +629,7 @@ def interactive_menu():
         elif choice == "12": cmd_update()
         elif choice == "13": cmd_authorize()
         elif choice == "14": cmd_about()
+        elif choice == "15": cmd_export()
         else: print("❌ 无效选择")
         print()
 
@@ -523,6 +656,10 @@ if __name__ == "__main__":
         cmd_authorize()
     elif cmd == "about":
         cmd_about()
+    elif cmd == "export":
+        cmd_export()
+    elif cmd == "api-get":
+        cmd_api_get(args)
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
