@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "3.9.0"
+VERSION = "4.0.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -61,10 +61,22 @@ def derive_key(password):
     n = cfg.get("scrypt_n", 2**14)
     r = cfg.get("scrypt_r", 8)
     salt = b"secret_management_kdf_salt_v5"
-    raw = hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=1, dklen=32)
+    maxmem = max(32*1024*1024, 128 * n * r * 2)  # 自动放宽内存限制
+    raw = hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=1, maxmem=maxmem, dklen=32)
     env_key = get_env_key()  # 混入环境密钥，初始化即环境绑定
     combined = hashlib.sha256(raw + env_key).digest()
     return base64.urlsafe_b64encode(combined)
+
+# ===== 哈希 → emoji 表情映射（防篡改可视化） =====
+EMOJI_TABLE = ["💛","🏹","🎂","🏅","🇧🇷","🦺","🆚","🛎️","🔥","💎","🌙","⭐","🎯","🦄","🚀","👑"]
+
+def hash_to_emoji(hash_hex, count=8):
+    """哈希值(hex) → count个emoji表情（每4bit映射一个）"""
+    result = ""
+    for i in range(min(count, len(hash_hex))):
+        idx = int(hash_hex[i], 16)
+        result += EMOJI_TABLE[idx]
+    return result
 
 # ===== 跨平台硬件指纹 =====
 def _sh(s, maxlen=16):
@@ -432,9 +444,10 @@ def cmd_set_strength():
     print(f"当前加密强度: {cur}")
     print("  1. 快速   (8MB内存, 低配设备)")
     print("  2. 标准   (16MB内存, 默认)")
-    print("  3. 高强度 (16MB内存, 迭代翻倍, 更安全)")
-    choice = input("选择 [1-3]: ").strip()
-    mapping = {"1": (2**13, 8), "2": (2**14, 8), "3": (2**15, 4)}
+    print("  3. 高强度 (32MB内存, 更安全)")
+    print("  4. 极高   (64MB内存, 最强)")
+    choice = input("选择 [1-4]: ").strip()
+    mapping = {"1": (2**13, 8), "2": (2**14, 8), "3": (2**15, 8), "4": (2**16, 8)}
     if choice not in mapping:
         print("❌ 无效选择"); return
     new_n, new_r = mapping[choice]
@@ -610,6 +623,69 @@ def cmd_api_get(args):
             pass
         print(f"  {k} = {v}")
 
+def cmd_chain():
+    """上链校验：上传哈希到服务器，返回比对链接"""
+    password = _get_password()
+    data = _load_safe(password)
+    if data is None: return
+    if not data:
+        print("❌ 密钥库为空，先存密钥"); return
+    data_str = json.dumps(data, sort_keys=True, ensure_ascii=False)
+    data_hash = hashlib.sha256(data_str.encode()).hexdigest()
+    emojis = hash_to_emoji(data_hash)
+    print("本地表情: " + " ".join(emojis))
+    print("⏳ 上传服务器...")
+    try:
+        import urllib.request
+        payload = json.dumps({"hash": data_hash, "emojis": "".join(emojis)}).encode()
+        req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
+            data=payload, headers={"Content-Type": "application/json"})
+        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
+        if resp.get("url"):
+            print(f"✅ 已上链: {resp['url']}")
+            print("   打开链接，比对表情是否一致")
+        else:
+            print(f"⚠️ {resp.get('error', '上链失败')}")
+    except Exception as e:
+        print(f"❌ 上传失败(服务器链端点未部署): {str(e)[:60]}")
+
+def cmd_query():
+    """泄露查询：显示本地表情 + 链上页面链接"""
+    password = _get_password()
+    data = _load_safe(password)
+    if data is None: return
+    if not data:
+        print("❌ 密钥库为空"); return
+    data_str = json.dumps(data, sort_keys=True, ensure_ascii=False)
+    data_hash = hashlib.sha256(data_str.encode()).hexdigest()
+    emojis = hash_to_emoji(data_hash)
+    print("本地表情: " + " ".join(emojis))
+    print(f"链上页面: https://furrynaling.com/{data_hash[:32]}.html")
+    print("打开页面比对表情，判断数据是否被篡改")
+
+def cmd_wipe():
+    """抹除式更新：删除本地所有密钥，用于版本过低/不许可更新的强制重置"""
+    print("⚠️ 抹除式更新")
+    print("   用途: 云端版本不许可更新，或本地版本过低时强制重置")
+    print("   后果: 删除本地所有密钥、环境密钥、分片、配置")
+    confirm = input("输入 nlyes 确认: ").strip()
+    if confirm != "nlyes":
+        print("❌ 已取消"); return
+    import shutil
+    removed = 0
+    for f in [VAULT, ECC_KEY_FILE, HW_FILE, CONFIG_FILE, ENV_KEY_FILE]:
+        if os.path.exists(f):
+            os.remove(f)
+            print(f"  已删除: {os.path.basename(f)}")
+            removed += 1
+    if os.path.exists(SHAMIR_DIR):
+        shutil.rmtree(SHAMIR_DIR)
+        print("  已删除: shards/")
+    if os.path.exists(os.path.join(BASE_DIR, "export")):
+        shutil.rmtree(os.path.join(BASE_DIR, "export"))
+        print("  已删除: export/")
+    print(f"✅ 已抹除 {removed} 个文件，重新运行 keynl 初始化")
+
 def print_status():
     hsm_type, hsm_desc = detect_hsm()
     cfg = load_config()
@@ -641,9 +717,9 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   10. 修改分片数量
   11. 查看状态
   12. 检查更新
-  13. 授权本次窗口免密
-  14. 关于作者
-  15. 导出API(给AI用)
+  13. 授权本次窗口免密   14. 关于作者
+  15. 导出API(给AI用)    16. 上链校验
+  17. 泄露查询           18. 抹除式更新
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
@@ -651,7 +727,7 @@ def interactive_menu():
     print(MENU)
     while True:
         try:
-            choice = input("请选择 [0-15]: ").strip()
+            choice = input("请选择 [0-18]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -672,6 +748,9 @@ def interactive_menu():
         elif choice == "13": cmd_authorize()
         elif choice == "14": cmd_about()
         elif choice == "15": cmd_export()
+        elif choice == "16": cmd_chain()
+        elif choice == "17": cmd_query()
+        elif choice == "18": cmd_wipe()
         else: print("❌ 无效选择")
         print()
 
@@ -702,6 +781,12 @@ if __name__ == "__main__":
         cmd_export()
     elif cmd == "api-get":
         cmd_api_get(args)
+    elif cmd == "chain":
+        cmd_chain()
+    elif cmd == "query":
+        cmd_query()
+    elif cmd == "wipe":
+        cmd_wipe()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
