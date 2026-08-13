@@ -17,22 +17,27 @@ pip3 install cryptography 2>&1 | tail -3 || {
     pip3 install --user cryptography 2>&1 | tail -3
 }
 
-# 3. 下载 keymgr
+# 3. 下载 keymgr（用 mktemp 跨平台临时文件，避免 /tmp 不可写）
 echo "⬇️ 下载 keymgr..."
-curl -fsSL "https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/scripts/keymgr.py" -o /tmp/keymgr_tmp
+TMPFILE=$(mktemp)
+curl -fsSL "https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/scripts/keymgr.py" -o "$TMPFILE"
 
-# 4. 安装到系统
-sudo mv /tmp/keymgr_tmp /usr/local/bin/keymgr 2>/dev/null || {
+# 4. 安装到系统（优先 /usr/local/bin，回退 ~/.local/bin）
+if [ -w /usr/local/bin ] || command -v sudo &>/dev/null; then
+    sudo mv "$TMPFILE" /usr/local/bin/keymgr 2>/dev/null || mv "$TMPFILE" /usr/local/bin/keymgr
+    INSTALL_PATH="/usr/local/bin/keymgr"
+else
     mkdir -p "$HOME/.local/bin"
-    mv /tmp/keymgr_tmp "$HOME/.local/bin/keymgr"
-    echo "⚠️ 无sudo权限，安装到 ~/.local/bin/keymgr"
-}
-chmod 700 /usr/local/bin/keymgr 2>/dev/null || chmod 700 "$HOME/.local/bin/keymgr"
+    mv "$TMPFILE" "$HOME/.local/bin/keymgr"
+    INSTALL_PATH="$HOME/.local/bin/keymgr"
+    echo "⚠️ 安装到 ~/.local/bin/keymgr"
+fi
+chmod 700 "$INSTALL_PATH"
 
 # 5. 验证
 echo ""
 echo "✅ 安装完成！"
 echo ""
-keymgr status 2>/dev/null || "$HOME/.local/bin/keymgr" status
+"$INSTALL_PATH" status 2>/dev/null || keymgr status
 echo ""
 echo "下一步: keymgr setpass   # 设置主密码"
