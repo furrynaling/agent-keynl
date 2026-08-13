@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.6.1"
+VERSION = "4.6.2"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -805,7 +805,7 @@ def cmd_query():
                 idx = int(choice) - 1
                 if 0 <= idx < len(items):
                     it = items[idx]
-                    print(f"链上表情: {it['emojis']}")
+                    print(f"链上表情(这条记录上链时): {it['emojis']}")
                     print(f"完整哈希: {it['full_hash']}")
                     print(f"链上页面: https://furrynaling.com/chain/{it['full_hash'][:32]}.html")
                     print(f"上链时间: {it['created_at']}")
@@ -814,11 +814,13 @@ def cmd_query():
                     if data is not None and data:
                         data_hash = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
                         local_emojis = "".join(hash_to_emoji(data_hash))
-                        print(f"本地表情: {' '.join(hash_to_emoji(data_hash))}")
+                        print(f"当前本地表情(现在的数据): {' '.join(hash_to_emoji(data_hash))}")
+                        print()
                         if local_emojis == it['emojis']:
-                            print("✅ 表情一致，数据安全")
+                            print("✅ 一致：当前数据与这条记录一致，未被篡改")
                         else:
-                            print("⚠️ 表情不一致，本地数据可能已变动")
+                            print("⚠️ 不一致：数据自这条记录后已变动")
+                            print("   （正常现象，说明你上链后又改过密钥）")
                 else:
                     print("❌ 编号无效")
             except:
