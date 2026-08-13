@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "3.4.0"
+VERSION = "3.5.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -265,12 +265,51 @@ def cmd_changepass():
     save_vault(p1, data)
     print("✅ 主密码已修改")
 
-def _input_password():
+_cached_password = None
+
+def _get_password():
+    """获取主密码（优先用会话缓存的密码）"""
+    global _cached_password
+    if _cached_password:
+        return _cached_password
     return getpass.getpass("🔑 主密码: ")
 
+def _load_safe(password):
+    """安全加载 vault，出错返回 None + 友好提示"""
+    if not os.path.exists(VAULT):
+        return {}
+    try:
+        return load_vault(password)
+    except Exception:
+        print("❌ 主密码错误，或密钥库已损坏")
+        return None
+
+def cmd_authorize():
+    """授权本次终端窗口免密"""
+    global _cached_password
+    p = getpass.getpass("🔑 主密码: ")
+    if not os.path.exists(VAULT):
+        print("❌ 密钥库未初始化，先设置主密码(1)"); return
+    try:
+        load_vault(p)
+    except Exception:
+        print("❌ 主密码错误"); return
+    _cached_password = p
+    print("✅ 已授权，本次终端窗口内免密操作")
+
+def cmd_about():
+    print(f"🔐 secret-management v{VERSION}")
+    print("   一个给 AI Agent 的加密密码本")
+    print("")
+    print("   作者: 纳棂")
+    print("   邮箱: furrynaling@outlook.com")
+    print("   网站: furrynaling.com · naling.net")
+    print("   仓库: github.com/furrynaling/secret-management")
+
 def cmd_add():
-    password = _input_password()
-    data = load_vault(password) if os.path.exists(VAULT) else {}
+    password = _get_password()
+    data = _load_safe(password)
+    if data is None: return
     name = input("密钥名称: ").strip()
     if not name:
         print("❌ 名称不能为空"); return
@@ -280,26 +319,30 @@ def cmd_add():
     print(f"✅ {name}")
 
 def cmd_get():
-    password = _input_password()
+    password = _get_password()
     name = input("密钥名称: ").strip()
-    val = load_vault(password).get(name)
+    data = _load_safe(password)
+    if data is None: return
+    val = data.get(name)
     if val is None:
         print("❌ 不存在")
     else:
         print(f"{name} = {val}")
 
 def cmd_list():
-    password = _input_password()
-    data = load_vault(password)
+    password = _get_password()
+    data = _load_safe(password)
+    if data is None: return
     if not data:
         print("  (空)"); return
     for k, v in sorted(data.items()):
         print(f"  {k}: {'***' if len(v)>20 else v}")
 
 def cmd_delete():
-    password = _input_password()
+    password = _get_password()
     name = input("密钥名称: ").strip()
-    data = load_vault(password)
+    data = _load_safe(password)
+    if data is None: return
     if name in data:
         del data[name]; save_vault(password, data)
         print(f"✅ {name}")
@@ -425,6 +468,8 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   10. 修改分片数量
   11. 查看状态
   12. 检查更新
+  13. 授权本次窗口免密
+  14. 关于作者
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
@@ -432,7 +477,7 @@ def interactive_menu():
     print(MENU)
     while True:
         try:
-            choice = input("请选择 [0-12]: ").strip()
+            choice = input("请选择 [0-14]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -450,6 +495,8 @@ def interactive_menu():
         elif choice == "10": cmd_set_shards()
         elif choice == "11": print_status()
         elif choice == "12": cmd_update()
+        elif choice == "13": cmd_authorize()
+        elif choice == "14": cmd_about()
         else: print("❌ 无效选择")
         print()
 
@@ -472,6 +519,10 @@ if __name__ == "__main__":
         cmd_set_shards()
     elif cmd == "update":
         cmd_update()
+    elif cmd == "authorize":
+        cmd_authorize()
+    elif cmd == "about":
+        cmd_about()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
