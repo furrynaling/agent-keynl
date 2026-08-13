@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.8.1"
+VERSION = "4.9.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -69,13 +69,14 @@ def derive_key(password):
     return base64.urlsafe_b64encode(combined)
 
 # ===== 哈希 → emoji 表情映射（防篡改可视化） =====
-EMOJI_TABLE = ["💛","🏹","🎂","🏅","🐱","🦺","🆚","🛎️","🔥","💎","🌙","⭐","🎯","🦄","🚀","👑"]
+EMOJI_TABLE = ["😂", "😱", "🌚", "😭", "🌝", "😒", "🙄", "🤔", "😳", "😛", "🙃", "😅", "😊", "🙈", "😍", "🙊", "😘", "🙉", "😏", "🌸", "🍀", "🤟", "🫶", "🫵", "🫰", "🫦", "🤌", "👍", "👌", "🌷", "🌹", "💪", "👏", "🥚", "🦄", "🤙", "🥟", "💅", "💎", "🐔", "💄", "🍺", "💋", "🐮", "🉑", "🐻", "🐶", "💰", "🐼", "🌈", "🐖", "🖤", "🦞", "🐇", "🐟", "🦌", "🧸", "🐕", "🐈", "🐴", "💚", "💙", "🌏", "💕", "🔥", "⚡", "🎁", "✨", "🧧", "🌟", "🎉", "💫", "🎊", "🙋", "⭐", "🙆", "🌙", "👰", "🌛", "😉", "😌", "😡", "😴", "😷", "🥱", "💯", "🌂", "☔", "💦", "💤", "😎", "💊", "🤓", "🍉", "🥳", "🍔", "🥺", "🍋", "🥰", "🥭", "🤒", "🍓", "🤐", "🥒", "🤭", "🥠", "👿", "🍇", "👻", "⚽", "💩", "🏀", "🏓", "🚆", "🛀", "🃏", "🚀", "🎲", "🀄", "🔮", "🎹", "🎧", "📢", "🚗", "🚢", "🦲", "🤶", "🎅"]
 
 def hash_to_emoji(hash_hex, count=8):
-    """哈希值(hex) → count个emoji表情（每4bit映射一个）"""
+    """哈希 → count个emoji（每7bit映射128个表情之一）"""
+    h = int(hash_hex, 16)
     result = ""
-    for i in range(min(count, len(hash_hex))):
-        idx = int(hash_hex[i], 16)
+    for i in range(count):
+        idx = (h >> (i * 7)) & 0x7F
         result += EMOJI_TABLE[idx]
     return result
 
