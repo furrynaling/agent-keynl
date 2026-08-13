@@ -99,12 +99,33 @@ $ keymgr status
 
 ---
 
+## 🌍 平台支持
+
+| 平台 | 安装方式 | 状态 |
+|:---|:---|:---|
+| 🐧 Linux | `curl install.sh \| bash` | ✅ 完整支持 |
+| 🪟 Windows | `irm install.ps1 \| iex` | ✅ 完整支持 |
+| 📱 Android/Termux | `curl install.sh \| bash` | ✅ 完整支持 |
+| 🍎 macOS | `curl install.sh \| bash` | ⚠️ 可用（无TPM） |
+
+存储目录自动适配：Linux `~/.secret-management` · Windows `%APPDATA%\secret-management` · Termux `~/.secret-management`
+
+---
+
 ## 🚀 快速开始
 
 ### 一键安装
 
+**Linux / macOS / Termux：**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/install.sh | bash
+```
+
+**Windows（PowerShell）：**
+
+```powershell
+irm https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/install.ps1 | iex
 ```
 
 > ⚠️ **安全提示**：`curl | bash` 直接执行远程脚本有风险。本项目的 install.sh 内置 SHA256 校验，会验证下载的 keymgr.py 是否被篡改。你也可以手动核对：

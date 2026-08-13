@@ -1,83 +1,131 @@
 #!/usr/bin/env python3
-"""secret-management v4 · scrypt + HSM自动适配 + Shamir + mlock"""
-import os, sys, json, hashlib, base64, getpass, secrets
+"""secret-management v5 · scrypt + HSM + Shamir + 跨平台(Win/Linux/Android)"""
+import os, sys, json, hashlib, base64, getpass, secrets, platform, ctypes
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
-import ctypes
 
-# 可配置路径（环境变量覆盖）
-VAULT = os.environ.get("KEYMGR_VAULT", "/root/mytp/.keys/vault.enc")
-ECC_KEY_FILE = os.environ.get("KEYMGR_ECC", "/root/mytp/.keys/ecc.key")
-HW_FILE = os.environ.get("KEYMGR_HW", "/root/mytp/.keys/hw.bin")
-SHAMIR_DIR = os.environ.get("KEYMGR_SHARDS", "/root/mytp/.keys/shards")
-BASE_DIR = os.path.dirname(VAULT) or "/root/mytp/.keys"
+# ===== 跨平台默认目录 =====
+def default_base_dir():
+    """根据平台返回可写目录"""
+    if os.environ.get("KEYMGR_DIR"):
+        return os.environ["KEYMGR_DIR"]
+    home = os.path.expanduser("~")
+    if platform.system() == "Windows":
+        # Windows: %APPDATA%\secret-management
+        return os.path.join(os.environ.get("APPDATA", home), "secret-management")
+    elif os.environ.get("PREFIX") and "termux" in os.environ.get("PREFIX", "").lower():
+        # Termux: $HOME/.secret-management
+        return os.path.join(home, ".secret-management")
+    else:
+        # Linux/macOS
+        return os.path.join(home, ".secret-management")
 
-# ===== scrypt 密码哈希（Python内置，免编译依赖） =====
+BASE_DIR = default_base_dir()
+os.makedirs(BASE_DIR, exist_ok=True)
+VAULT = os.environ.get("KEYMGR_VAULT", os.path.join(BASE_DIR, "vault.enc"))
+ECC_KEY_FILE = os.environ.get("KEYMGR_ECC", os.path.join(BASE_DIR, "ecc.key"))
+HW_FILE = os.environ.get("KEYMGR_HW", os.path.join(BASE_DIR, "hw.bin"))
+SHAMIR_DIR = os.environ.get("KEYMGR_SHARDS", os.path.join(BASE_DIR, "shards"))
+
+# ===== scrypt 密码哈希 =====
 def derive_key(password):
-    """scrypt → 内存密集型 → 抗ASIC/GPU"""
-    salt = b"secret_management_kdf_salt_v4"
+    salt = b"secret_management_kdf_salt_v5"
     raw = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1, dklen=32)
     return base64.urlsafe_b64encode(raw)
 
-# ===== HSM / TPM 自动适配 =====
+# ===== 跨平台硬件指纹 =====
+def _sh(s, maxlen=16):
+    return hashlib.sha256(s.encode()).hexdigest()[:maxlen] if s else "0"*maxlen
+
+def get_machine_id():
+    """机器ID：Linux machine-id / Windows MachineGuid / Mac IOPlatformUUID"""
+    sys = platform.system()
+    try:
+        if sys == "Windows":
+            import subprocess
+            out = subprocess.run(['reg','query','HKLM\\SOFTWARE\\Microsoft\\Cryptography','/v','MachineGuid'],
+                capture_output=True, text=True, timeout=5).stdout
+            for line in out.splitlines():
+                if 'MachineGuid' in line:
+                    return line.split()[-1]
+        elif sys == "Darwin":
+            return os.popen("ioreg -rd1 -c IOPlatformExpertDevice | grep IOPlatformUUID").read().strip()
+        else:
+            # Linux / Android / Termux
+            if os.path.exists('/etc/machine-id'):
+                return open('/etc/machine-id').read().strip()
+            # Android 无 machine-id，用 PREFIX 或 android id
+            return os.environ.get("PREFIX", "") or os.popen("getprop ro.serialno 2>/dev/null").read().strip()
+    except:
+        pass
+    return ""
+
+def get_hostname():
+    return platform.node()
+
+def get_kernel():
+    return platform.version() or platform.release()
+
+def get_mac():
+    """MAC 地址：Linux ip / Windows getmac / Mac ifconfig"""
+    sys = platform.system()
+    try:
+        if sys == "Windows":
+            out = os.popen("getmac /fo csv /nh 2>/dev/null").read()
+            for line in out.splitlines():
+                mac = line.split(',')[0].strip('"')
+                if ':' in mac:
+                    return mac
+        elif sys == "Darwin":
+            out = os.popen("ifconfig en0 2>/dev/null | grep ether").read()
+            if 'ether' in out:
+                return out.split()[1]
+        else:
+            out = os.popen("ip link show 2>/dev/null | grep 'link/ether' | head -1").read()
+            if 'link/ether' in out:
+                return out.split()[1]
+    except:
+        pass
+    return ""
+
 def detect_hsm():
-    """检测硬件安全模块，返回 (类型, 指纹来源描述)"""
-    # 1. TPM 2.0（Linux 内核暴露 /dev/tpm0 或 /dev/tpmrm0）
-    if os.path.exists('/dev/tpm0') or os.path.exists('/dev/tpmrm0'):
+    """检测硬件安全模块"""
+    if platform.system() != "Windows" and (os.path.exists('/dev/tpm0') or os.path.exists('/dev/tpmrm0')):
         try:
             pcr = os.popen("tpm2_pcrread sha256:0 2>/dev/null || cat /sys/class/tpm/tpm0/pcr-sha256/0 2>/dev/null").read().strip()
             if pcr:
-                return 'tpm', f"TPM 2.0 (PCR0={hashlib.sha256(pcr.encode()).hexdigest()[:12]}...)"
+                return 'tpm', f"TPM 2.0 (PCR0={_sh(pcr, 12)}...)"
         except:
             pass
-    
-    # 2. 云 KMS（腾讯云/阿里云 KMS 通过环境变量）
     if os.environ.get('TENCENT_KMS_KEY_ID') or os.environ.get('ALIYUN_KMS_KEY_ID'):
         kms_id = os.environ.get('TENCENT_KMS_KEY_ID') or os.environ.get('ALIYUN_KMS_KEY_ID')
         return 'cloud-kms', f"云KMS ({kms_id[:8]}...)"
-    
-    # 3. 回退软件指纹
-    return 'software', "软件指纹 (MAC+机器ID+主机名+内核)"
+    return 'software', "软件指纹 (机器ID+主机名+内核+MAC)"
 
 def get_hw_fingerprint():
-    """硬件指纹：优先 TPM/KMS，回退软件指纹"""
     hsm_type, _ = detect_hsm()
-    
     if hsm_type == 'tpm':
         try:
             pcr = os.popen("tpm2_pcrread sha256:0 2>/dev/null").read().strip()
             if pcr:
-                return hashlib.sha256(('tpm:' + pcr).encode()).hexdigest()[:64]
+                return hashlib.sha256(('tpm:'+pcr).encode()).hexdigest()[:64]
         except:
             pass
     elif hsm_type == 'cloud-kms':
         kms_id = os.environ.get('TENCENT_KMS_KEY_ID') or os.environ.get('ALIYUN_KMS_KEY_ID', '')
-        return hashlib.sha256(('kms:' + kms_id).encode()).hexdigest()[:64]
-    
-    # 软件指纹（回退）
-    parts = []
-    try:
-        parts.append(hashlib.sha256(open('/etc/machine-id','rb').read().strip()).hexdigest()[:16])
-    except: parts.append("0"*16)
-    try:
-        parts.append(hashlib.sha256(os.popen('hostname').read().strip().encode()).hexdigest()[:16])
-    except: parts.append("0"*16)
-    try:
-        parts.append(hashlib.sha256(os.popen('uname -r').read().strip().encode()).hexdigest()[:16])
-    except: parts.append("0"*16)
-    try:
-        mac = os.popen("ip link show eth0 2>/dev/null|grep ether|awk '{print $2}'").read().strip()
-        parts.append(hashlib.sha256(mac.encode()).hexdigest()[:16])
-    except: parts.append("0"*16)
-    return ''.join(parts)
+        return hashlib.sha256(('kms:'+kms_id).encode()).hexdigest()[:64]
+    # 软件指纹（跨平台）
+    return _sh(get_machine_id()) + _sh(get_hostname()) + _sh(get_kernel()) + _sh(get_mac())
 
 def check_hw():
     current = get_hw_fingerprint()
     if not os.path.exists(HW_FILE):
         os.makedirs(os.path.dirname(HW_FILE), exist_ok=True)
         with open(HW_FILE, 'w') as f: f.write(current)
-        os.chmod(HW_FILE, 0o600); return True
+        try: os.chmod(HW_FILE, 0o600)
+        except: pass
+        return True
     return current == open(HW_FILE).read().strip()
 
 # ===== Shamir 门限分片（3/5） =====
@@ -101,62 +149,55 @@ def shamir_recover(shares):
     return secret.to_bytes((secret.bit_length()+7)//8, 'big')
 
 def save_shards(password):
-    import json as _json
     shares = shamir_split(password.encode())
     os.makedirs(SHAMIR_DIR, exist_ok=True)
     for i, val in shares.items():
-        with open(f"{SHAMIR_DIR}/shard_{i}.key", 'w') as f:
-            _json.dump({"id": i, "value": val}, f)
-    with open(f"{SHAMIR_DIR}/info.txt", 'w') as f:
-        f.write("Shamir(3,5)门限\n分片1-2: 安全存储\n分片3: 随身U盘\n分片4-5: 备份")
-    os.chmod(SHAMIR_DIR, 0o700)
+        with open(os.path.join(SHAMIR_DIR, f"shard_{i}.key"), 'w') as f:
+            json.dump({"id": i, "value": val}, f)
+    with open(os.path.join(SHAMIR_DIR, "info.txt"), 'w') as f:
+        f.write("Shamir(3,5)门限\n任意3个分片可恢复主密码")
     print("✅ 5个分片已生成")
 
-# ===== 内存锁 =====
+# ===== 内存锁（跨平台） =====
+MLOCK_OK = False
 try:
-    libc = ctypes.CDLL("libc.so.6")
-    libc.mlockall(1 | 2)  # MCL_CURRENT | MCL_FUTURE
-    MLOCK_OK = True
+    if platform.system() != "Windows":
+        libc = ctypes.CDLL("libc.so.6")
+        libc.mlockall(1 | 2)
+        MLOCK_OK = True
 except:
-    MLOCK_OK = False
+    pass
 
-# ===== ECC 密钥 =====
-if os.path.exists(ECC_KEY_FILE):
-    SERVER_ECC_KEY = serialization.load_pem_private_key(open(ECC_KEY_FILE,'rb').read(), password=None)
-else:
-    SERVER_ECC_KEY = ec.generate_private_key(ec.SECP384R1())
-    os.makedirs(os.path.dirname(ECC_KEY_FILE), exist_ok=True)
-    with open(ECC_KEY_FILE, 'wb') as f:
-        f.write(SERVER_ECC_KEY.private_bytes(encoding=serialization.Encoding.PEM, format=serialization.PrivateFormat.PKCS8, encryption_algorithm=serialization.NoEncryption()))
-    os.chmod(ECC_KEY_FILE, 0o600)
+# ===== ECC 密钥（惰性初始化，避免模块加载时写文件） =====
+SERVER_ECC_KEY = None
+
+def get_ecc_key():
+    global SERVER_ECC_KEY
+    if SERVER_ECC_KEY is None:
+        if os.path.exists(ECC_KEY_FILE):
+            SERVER_ECC_KEY = serialization.load_pem_private_key(open(ECC_KEY_FILE,'rb').read(), password=None)
+        else:
+            SERVER_ECC_KEY = ec.generate_private_key(ec.SECP384R1())
+            os.makedirs(os.path.dirname(ECC_KEY_FILE), exist_ok=True)
+            with open(ECC_KEY_FILE, 'wb') as f:
+                f.write(SERVER_ECC_KEY.private_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PrivateFormat.PKCS8,
+                    encryption_algorithm=serialization.NoEncryption()))
+            try: os.chmod(ECC_KEY_FILE, 0o600)
+            except: pass
+    return SERVER_ECC_KEY
 
 def get_ecc_fp():
-    pub = SERVER_ECC_KEY.public_key().public_bytes(encoding=serialization.Encoding.PEM, format=serialization.PublicFormat.SubjectPublicKeyInfo)
+    pub = get_ecc_key().public_key().public_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PublicFormat.SubjectPublicKeyInfo)
     return hashlib.sha384(pub).hexdigest()[:24]
-
-# ===== 假文件校验 =====
-DECOY_FILES = [os.path.join(BASE_DIR, "..", f) for f in ["package.json","README.md","launcher.sh","src/index.js","src/config.js","lib/utils.py","lib/crypto.py","data/cache.db","data/sessions.bin","data/server.log"]]
-DECOY_FILES = [os.path.abspath(f) for f in DECOY_FILES]
-DECOY_HASH_FILE = os.path.join(BASE_DIR, "decoy.hash")
-
-def check_decoys():
-    hashes = []
-    for f in sorted(DECOY_FILES):
-        if not os.path.exists(f): raise Exception(f"❌ 伪装文件缺失: {f}")
-        hashes.append(hashlib.sha256(open(f,'rb').read()).hexdigest()[:8])
-    return ':'.join(hashes)
-
-def verify_decoys():
-    if not os.path.exists(DECOY_HASH_FILE):
-        with open(DECOY_HASH_FILE,'w') as f: f.write(check_decoys()); return True
-    if check_decoys() != open(DECOY_HASH_FILE).read().strip():
-        raise Exception("❌ 伪装文件被篡改!")
 
 # ===== 主接口 =====
 def load_vault(password):
     if not os.path.exists(VAULT): return {}
-    verify_decoys()
-    if not check_hw(): raise Exception("❌ 硬件指纹不匹配! 密文可能被复制到其他服务器")
+    if not check_hw(): raise Exception("❌ 硬件指纹不匹配! 密文可能被复制到其他设备")
     key = derive_key(password)
     f = Fernet(key)
     data = json.loads(f.decrypt(open(VAULT,'rb').read()))
@@ -173,62 +214,54 @@ def save_vault(password, data):
     f = Fernet(key)
     os.makedirs(os.path.dirname(VAULT), exist_ok=True)
     with open(VAULT, 'wb') as fh: fh.write(f.encrypt(json.dumps(clean).encode()))
-    os.chmod(VAULT, 0o600)
+    try: os.chmod(VAULT, 0o600)
+    except: pass
 
 def cmd_setpass():
-    """首次设置主密码"""
     if os.path.exists(VAULT):
         print("❌ 密钥库已存在，用 changepass 修改密码")
         return
     p1 = getpass.getpass("🔑 设置主密码(≥12位): ")
     if len(p1) < 12:
-        print("❌ 密码太短，至少12位")
-        return
+        print("❌ 密码太短，至少12位"); return
     p2 = getpass.getpass("🔑 确认主密码: ")
     if p1 != p2:
-        print("❌ 两次输入不一致")
-        return
+        print("❌ 两次输入不一致"); return
     save_vault(p1, {})
     print("✅ 主密码已设置，密钥库已初始化")
     print("💡 建议立即生成分片: keymgr shards")
 
 def cmd_changepass():
-    """修改主密码"""
     if not os.path.exists(VAULT):
-        print("❌ 密钥库不存在，用 setpass 初始化")
-        return
+        print("❌ 密钥库不存在，用 setpass 初始化"); return
     old = getpass.getpass("🔑 旧主密码: ")
     try:
         data = load_vault(old)
     except Exception as e:
-        print(f"❌ 旧密码错误: {e}")
-        return
+        print(f"❌ 旧密码错误: {e}"); return
     p1 = getpass.getpass("🔑 新主密码(≥12位): ")
     if len(p1) < 12:
-        print("❌ 密码太短")
-        return
+        print("❌ 密码太短"); return
     p2 = getpass.getpass("🔑 确认新密码: ")
     if p1 != p2:
-        print("❌ 两次输入不一致")
-        return
+        print("❌ 两次输入不一致"); return
     save_vault(p1, data)
     print("✅ 主密码已修改，数据已用新密码重新加密")
 
 def print_status():
     hsm_type, hsm_desc = detect_hsm()
-    print("🔐 secret-management v4")
+    print("🔐 secret-management v5")
+    print(f"   平台: {platform.system()} ({platform.machine()})")
     print(f"   HSM适配: {hsm_type} ({hsm_desc})")
     print(f"   硬件指纹: {get_hw_fingerprint()[:32]}...")
-    print(f"   内存锁: {'✅ 已启用' if MLOCK_OK else '⚠️ 未启用(swap可能泄漏)'}")
+    print(f"   内存锁: {'✅ 已启用' if MLOCK_OK else '⚠️ 未启用'}")
+    print(f"   存储目录: {BASE_DIR}")
     print(f"   密钥库: {'✅ 已初始化' if os.path.exists(VAULT) else '❌ 未初始化(setpass)'}")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print_status()
-        sys.exit(0)
-    
+        print_status(); sys.exit(0)
     cmd, args = sys.argv[1], sys.argv[2:]
-    
     if cmd == "setpass":
         cmd_setpass()
     elif cmd == "changepass":
@@ -250,10 +283,9 @@ if __name__ == "__main__":
             for k,v in sorted(data.items()):
                 print(f"  {k}: {'***' if len(v)>20 else v}")
         elif cmd == "shards":
-            save_shards(password); 
+            save_shards(password)
         elif cmd == "recover":
-            # 从分片恢复密码
-            print("输入分片(格式: id:value，空行结束):")
+            print("输入分片(格式 id:value，空行结束):")
             shares = {}
             while True:
                 line = input()
@@ -265,8 +297,7 @@ if __name__ == "__main__":
             if len(shares) < 3:
                 print("❌ 至少3个分片")
             else:
-                recovered = shamir_recover(shares).decode()
-                print(f"✅ 恢复的主密码: {recovered}")
+                print(f"✅ 恢复的主密码: {shamir_recover(shares).decode()}")
         elif cmd == "delete" and args:
             data = load_vault(password)
             if args[0] in data: del data[args[0]]; save_vault(password, data); print(f"✅ {args[0]}")
