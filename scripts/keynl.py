@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.8.0"
+VERSION = "4.8.1"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -69,7 +69,7 @@ def derive_key(password):
     return base64.urlsafe_b64encode(combined)
 
 # ===== 哈希 → emoji 表情映射（防篡改可视化） =====
-EMOJI_TABLE = ["💛","🏹","🎂","🏅","🇧🇷","🦺","🆚","🛎️","🔥","💎","🌙","⭐","🎯","🦄","🚀","👑"]
+EMOJI_TABLE = ["💛","🏹","🎂","🏅","🐱","🦺","🆚","🛎️","🔥","💎","🌙","⭐","🎯","🦄","🚀","👑"]
 
 def hash_to_emoji(hash_hex, count=8):
     """哈希值(hex) → count个emoji表情（每4bit映射一个）"""
