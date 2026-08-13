@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "3.7.0"
+VERSION = "3.8.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -23,6 +23,7 @@ ECC_KEY_FILE = os.environ.get("KEYNL_ECC", os.path.join(BASE_DIR, "ecc.key"))
 HW_FILE = os.environ.get("KEYNL_HW", os.path.join(BASE_DIR, "hw.bin"))
 SHAMIR_DIR = os.environ.get("KEYNL_SHARDS", os.path.join(BASE_DIR, "shards"))
 CONFIG_FILE = os.path.join(BASE_DIR, "config.json")
+ENV_KEY_FILE = os.path.join(BASE_DIR, "env.key")
 
 # ===== 配置文件（加密强度 + 分片方案） =====
 DEFAULT_CONFIG = {"scrypt_n": 2**14, "scrypt_r": 8, "shard_n": 5, "shard_k": 3}
@@ -49,6 +50,19 @@ def derive_key(password):
     salt = b"secret_management_kdf_salt_v5"
     raw = hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=1, dklen=32)
     return base64.urlsafe_b64encode(raw)
+
+# ===== 环境密钥（每个安装实例独立） =====
+def get_env_key():
+    """获取或生成环境密钥，每个 keynl 安装实例独立"""
+    if os.path.exists(ENV_KEY_FILE):
+        return open(ENV_KEY_FILE, 'rb').read()
+    env_key = secrets.token_bytes(32)
+    os.makedirs(BASE_DIR, exist_ok=True)
+    with open(ENV_KEY_FILE, 'wb') as f:
+        f.write(env_key)
+    try: os.chmod(ENV_KEY_FILE, 0o600)
+    except: pass
+    return env_key
 
 # ===== 跨平台硬件指纹 =====
 def _sh(s, maxlen=16):
@@ -491,12 +505,13 @@ def cmd_update():
         print(f"❌ 更新失败: {e}")
 
 def _api_key(password, bind_hw):
-    """生成 API 加密密钥（可选硬件绑定）"""
+    """生成 API 加密密钥（环境密钥 + 可选硬件绑定）"""
+    env_key = get_env_key()
     if bind_hw:
         hw = get_hw_fingerprint()
-        raw = hashlib.sha256(("keynl-api:" + password + ":" + hw).encode()).digest()
+        raw = hashlib.sha256(b"keynl-api:" + password.encode() + b":" + hw.encode() + b":" + env_key).digest()
     else:
-        raw = hashlib.sha256(("keynl-api:" + password).encode()).digest()
+        raw = hashlib.sha256(b"keynl-api:" + password.encode() + b":" + env_key).digest()
     return base64.urlsafe_b64encode(raw)
 
 def cmd_export():
@@ -601,6 +616,7 @@ def print_status():
     print(f"   分片方案: {cfg.get('shard_k',3)}-of-{cfg.get('shard_n',5)}")
     print(f"   内存锁: {'✅' if MLOCK_OK else '⚠️'}")
     print(f"   存储目录: {BASE_DIR}")
+    print(f"   环境密钥: {'✅ 已生成' if os.path.exists(ENV_KEY_FILE) else '❌ 未生成'}")
     print(f"   密钥库: {'✅ 已初始化' if os.path.exists(VAULT) else '❌ 未初始化'}")
     print(f"   ─────────────────────────────")
     print(f"   TO：纳棂 · furrynaling@outlook.com")
