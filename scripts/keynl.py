@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "3.6.0"
+VERSION = "3.7.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -477,8 +477,17 @@ def cmd_update():
     except Exception as e:
         print(f"❌ 更新失败: {e}")
 
+def _api_key(password, bind_hw):
+    """生成 API 加密密钥（可选硬件绑定）"""
+    if bind_hw:
+        hw = get_hw_fingerprint()
+        raw = hashlib.sha256(("keynl-api:" + password + ":" + hw).encode()).digest()
+    else:
+        raw = hashlib.sha256(("keynl-api:" + password).encode()).digest()
+    return base64.urlsafe_b64encode(raw)
+
 def cmd_export():
-    """导出加密 API 文件给 AI 调用"""
+    """导出加密 API 文件给 AI 调用（硬件绑定，复制到别处失效）"""
     password = _get_password()
     data = _load_safe(password)
     if data is None: return
@@ -500,38 +509,34 @@ def cmd_export():
         print("❌ 未选中"); return
     # 选加密类型
     print("加密类型:")
-    print("  1. Fernet 随机密钥 (最安全，生成独立密钥)")
-    print("  2. 密码加密 (用主密码解密)")
+    print("  1. 本机绑定 (硬件指纹，最安全，复制到别处无法解密)")
+    print("  2. 密码加密 (仅主密码，可复制但需密码)")
     enc_type = input("选择 [1-2]: ").strip()
     api_name = input("API文件名(默认 api_key): ").strip() or "api_key"
     export_dir = os.path.join(BASE_DIR, "export")
     os.makedirs(export_dir, exist_ok=True)
     api_file = os.path.join(export_dir, api_name + ".enc")
     payload = json.dumps(selected, ensure_ascii=False).encode()
-    if enc_type == "1":
-        api_key = Fernet.generate_key()
-        f = Fernet(api_key)
-        encrypted = f.encrypt(payload)
-        with open(api_file, 'wb') as fh:
-            fh.write(encrypted)
-        print(f"✅ 已导出: file://{api_file}")
-        print(f"   🔑 API密钥(复制给AI): {api_key.decode()}")
-        print(f"   AI调用: keynl api-get {api_name} {api_key.decode()}")
-    elif enc_type == "2":
-        key = derive_key(password)
-        f = Fernet(key)
-        encrypted = f.encrypt(payload)
-        with open(api_file, 'wb') as fh:
-            fh.write(encrypted)
-        print(f"✅ 已导出: file://{api_file}")
+    bind = (enc_type == "1")
+    key = _api_key(password, bind)
+    f = Fernet(key)
+    encrypted = f.encrypt(payload)
+    # 文件头标记加密类型
+    tag = b"HW:" if bind else b"PW:"
+    with open(api_file, 'wb') as fh:
+        fh.write(tag + encrypted)
+    print(f"✅ 已导出: file://{api_file}")
+    if bind:
+        print(f"   🔒 本机绑定：只能在当前设备解密，复制到别处失效")
         print(f"   AI调用: keynl api-get {api_name}")
     else:
-        print("❌ 无效选择")
+        print(f"   🔐 密码加密：需主密码解密")
+        print(f"   AI调用: keynl api-get {api_name}")
 
 def cmd_api_get(args):
     """解密读取导出的 API 文件"""
     if not args:
-        print("用法: keynl api-get <API名> [API密钥]")
+        print("用法: keynl api-get <API名>")
         return
     api_name = args[0]
     export_dir = os.path.join(BASE_DIR, "export")
@@ -539,23 +544,27 @@ def cmd_api_get(args):
     if not os.path.exists(api_file):
         print(f"❌ 文件不存在: {api_file}")
         return
-    encrypted = open(api_file, 'rb').read()
-    if len(args) >= 2:
-        # Fernet 密钥解密
-        try:
-            f = Fernet(args[1].encode())
-            payload = f.decrypt(encrypted)
-        except Exception as e:
-            print(f"❌ API密钥错误"); return
+    raw = open(api_file, 'rb').read()
+    if raw.startswith(b"HW:"):
+        bind = True
+        encrypted = raw[3:]
+    elif raw.startswith(b"PW:"):
+        bind = False
+        encrypted = raw[3:]
     else:
-        # 主密码解密
-        password = _get_password()
-        key = derive_key(password)
-        f = Fernet(key)
-        try:
-            payload = f.decrypt(encrypted)
-        except:
-            print("❌ 主密码错误"); return
+        encrypted = raw
+        bind = False
+    password = _get_password()
+    key = _api_key(password, bind)
+    f = Fernet(key)
+    try:
+        payload = f.decrypt(encrypted)
+    except:
+        if bind:
+            print("❌ 解密失败：可能不在原设备，或密码错误")
+        else:
+            print("❌ 主密码错误")
+        return
     selected = json.loads(payload)
     for k, v in selected.items():
         try:
