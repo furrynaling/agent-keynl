@@ -101,6 +101,14 @@ $ keymgr status
 
 ## 🚀 快速开始
 
+### 一键安装
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/install.sh | bash
+```
+
+### 手动安装
+
 ```bash
 # 1. 安装依赖
 pip install argon2-cffi cryptography
@@ -108,7 +116,11 @@ pip install argon2-cffi cryptography
 # 2. 部署脚本
 cp scripts/keymgr.py /usr/local/bin/keymgr
 chmod 700 /usr/local/bin/keymgr
+```
 
+### 首次使用
+
+```bash
 # 3. 首次设密码
 keymgr setpass
 
