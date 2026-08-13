@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.9.0"
+VERSION = "4.10.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -996,6 +996,36 @@ def cmd_ots_verify():
     except Exception as e:
         print(f"❌ 验证失败: {e}")
 
+def cmd_uninstall():
+    """卸载 keynl：删除程序 + 所有数据"""
+    print("⚠️ 卸载 keynl")
+    print("   将删除: 程序文件 + 所有密钥/分片/配置/解密记录")
+    print("   此操作【不可逆】！")
+    confirm = input("输入 UNINSTALL 确认: ").strip()
+    if confirm != "UNINSTALL":
+        print("❌ 已取消"); return
+    import shutil
+    # 1. 删除数据目录
+    if os.path.exists(BASE_DIR):
+        shutil.rmtree(BASE_DIR)
+        print(f"✅ 已删除数据目录: {BASE_DIR}")
+    # 2. 删除程序文件
+    self_path = os.path.abspath(sys.argv[0])
+    removed = []
+    candidates = [self_path, self_path + ".bak",
+                  "/usr/local/bin/keynl", os.path.expanduser("~/.local/bin/keynl")]
+    for p in candidates:
+        if os.path.exists(p) and p not in removed:
+            try:
+                os.remove(p)
+                removed.append(p)
+            except:
+                pass
+    for p in removed:
+        print(f"✅ 已删除: {p}")
+    print("✅ keynl 已卸载")
+    print("   重装: curl -fsSL https://raw.githubusercontent.com/furrynaling/agent-keynl/main/install.sh | bash")
+
 def cmd_mychain():
     """我的链上密钥：查看上链记录 + 选择抹除"""
     import urllib.request
@@ -1060,6 +1090,7 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   17. 泄露查询        18. 抹除式更新
   19. 我的链上密钥     20. 文件上链
   21. 验证OTS存证     22. 解密审计
+  23. 卸载keynl
   a. 重新列出菜单表   b. 固定菜单表
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
@@ -1071,7 +1102,7 @@ def interactive_menu():
     print(MENU)
     while True:
         try:
-            choice = input("请选择 [0-22, a重列菜单, b固定菜单]: ").strip().lower()
+            choice = input("请选择 [0-23, a重列菜单, b固定菜单]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -1105,6 +1136,7 @@ def interactive_menu():
         elif choice == "20": cmd_chain_file()
         elif choice == "21": cmd_ots_verify()
         elif choice == "22": cmd_access_audit()
+        elif choice == "23": cmd_uninstall()
         else: print("❌ 无效选择")
         print()
         if FIXED_MENU:
@@ -1151,6 +1183,8 @@ if __name__ == "__main__":
         cmd_ots_verify()
     elif cmd == "access-log":
         cmd_access_audit()
+    elif cmd == "uninstall":
+        cmd_uninstall()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
