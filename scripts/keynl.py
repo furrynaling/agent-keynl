@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.2.0"
+VERSION = "4.3.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -727,6 +727,25 @@ def cmd_chain_file():
     except Exception as e:
         print(f"❌ 上传失败: {str(e)[:60]}")
 
+def cmd_ots_verify():
+    """验证 OTS 时间戳证明（需本机 ots CLI 或在线）"""
+    import shutil, subprocess
+    if not shutil.which("ots"):
+        print("⚠️ 本机未安装 ots CLI")
+        print("   安装: pip install opentimestamps-client")
+        print("   或在线验证: https://opentimestamps.org")
+        return
+    path = input("输入 .ots 证明文件路径: ").strip()
+    if not path or not os.path.exists(path):
+        print("❌ 文件不存在"); return
+    print("⏳ 验证时间戳证明（可能需联网查询比特币链）...")
+    try:
+        result = subprocess.run(["ots", "verify", path], capture_output=True, text=True, timeout=90)
+        out = result.stdout + result.stderr
+        print(out.strip() if out.strip() else "✅ 验证完成")
+    except Exception as e:
+        print(f"❌ 验证失败: {e}")
+
 def cmd_mychain():
     """我的链上密钥：查看上链记录 + 选择抹除"""
     import urllib.request
@@ -789,6 +808,7 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   15. 导出API给AI     16. 上链校验
   17. 泄露查询        18. 抹除式更新
   19. 我的链上密钥     20. 文件上链
+  21. 验证OTS存证
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
@@ -796,7 +816,7 @@ def interactive_menu():
     print(MENU)
     while True:
         try:
-            choice = input("请选择 [0-20]: ").strip()
+            choice = input("请选择 [0-21]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -822,6 +842,7 @@ def interactive_menu():
         elif choice == "18": cmd_wipe()
         elif choice == "19": cmd_mychain()
         elif choice == "20": cmd_chain_file()
+        elif choice == "21": cmd_ots_verify()
         else: print("❌ 无效选择")
         print()
 
@@ -862,6 +883,8 @@ if __name__ == "__main__":
         cmd_mychain()
     elif cmd == "chain-file":
         cmd_chain_file()
+    elif cmd == "ots-verify":
+        cmd_ots_verify()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
