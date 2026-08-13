@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.3.2"
+VERSION = "4.3.3"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -215,6 +215,8 @@ def save_shards(password):
     with open(os.path.join(SHAMIR_DIR, "info.txt"), 'w') as f:
         f.write(f"Shamir({k},{n})门限\n任意{k}个分片可恢复主密码")
     print(f"✅ {n}个分片已生成（任意{k}个可恢复）")
+    print(f"   分片目录: {SHAMIR_DIR}")
+    print(f"   恢复方法: keynl recover → 输入 shard_1.key,shard_3.key,shard_5.key")
 
 # ===== 内存锁 =====
 MLOCK_OK = False
@@ -423,18 +425,29 @@ def cmd_delete():
 def cmd_recover():
     cfg = load_config()
     k = cfg.get("shard_k", 3)
-    print(f"输入分片(格式 id:value，空行结束，需至少{k}个):")
+    print(f"分片目录: {SHAMIR_DIR}")
+    print(f"需要任意 {k} 个分片文件")
+    print("输入分片文件名(逗号分隔，如 shard_1.key,shard_3.key,shard_5.key):")
+    raw = input("> ").strip()
+    if not raw:
+        print("已取消"); return
     shares = {}
-    while True:
-        line = input()
-        if not line: break
+    for name in raw.split(','):
+        name = name.strip()
+        if not name: continue
+        # 自动拼接目录（支持文件名或完整路径）
+        path = name if os.path.isabs(name) else os.path.join(SHAMIR_DIR, name)
+        if not os.path.exists(path):
+            print(f"❌ 文件不存在: {path}")
+            continue
         try:
-            i, v = line.split(':')
-            shares[int(i)] = int(v)
-        except:
-            print("格式错误，用 id:value")
+            d = json.load(open(path))
+            shares[int(d["id"])] = int(d["value"])
+            print(f"✅ 已读取分片 {d['id']}")
+        except Exception as e:
+            print(f"❌ 无法解析: {name}")
     if len(shares) < k:
-        print(f"❌ 至少{k}个分片")
+        print(f"❌ 需要至少{k}个分片，当前只读到{len(shares)}个")
     else:
         print(f"✅ 恢复的主密码: {shamir_recover(shares).decode()}")
 
