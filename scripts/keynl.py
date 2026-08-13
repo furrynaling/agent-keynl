@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.1.0"
+VERSION = "4.2.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -645,6 +645,8 @@ def cmd_chain():
             print(f"✅ 已上链: {resp['url']}")
             if resp.get("ipfs"):
                 print(f"   📦 IPFS备份: {resp['ipfs']}")
+            if resp.get("ots"):
+                print(f"   ⛓️ 比特币存证: {resp['ots']}")
             if resp.get("signature"):
                 print(f"   ✍️ ECC签名: {resp['signature'][:24]}...")
             print("   打开链接，比对表情是否一致")
@@ -718,6 +720,8 @@ def cmd_chain_file():
             print(f"✅ 已上链: {resp['url']}")
             if resp.get("ipfs"):
                 print(f"   📦 IPFS备份: {resp['ipfs']}")
+            if resp.get("ots"):
+                print(f"   ⛓️ 比特币存证: {resp['ots']}")
         else:
             print(f"⚠️ {resp.get('error', '上链失败')}")
     except Exception as e:
