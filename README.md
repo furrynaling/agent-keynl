@@ -107,6 +107,15 @@ $ keymgr status
 curl -fsSL https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/install.sh | bash
 ```
 
+> ⚠️ **安全提示**：`curl | bash` 直接执行远程脚本有风险。本项目的 install.sh 内置 SHA256 校验，会验证下载的 keymgr.py 是否被篡改。你也可以手动核对：
+
+```bash
+# 手动下载后校验哈希
+curl -fsSL -o keymgr.py https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/scripts/keymgr.py
+echo "ebd7e7bfe19356be768f03ee6d252eab3069338688677bfa848f4d865549f5ad  keymgr.py" | sha256sum -c
+# 输出: keymgr.py: OK
+```
+
 ### 手动安装
 
 ```bash

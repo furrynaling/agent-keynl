@@ -1,8 +1,11 @@
 #!/bin/bash
-# secret-management 一键安装脚本
+# secret-management 一键安装脚本（含 SHA256 校验）
 set -e
 
 echo "🔐 正在安装 secret-management..."
+
+# keymgr.py 的 SHA256 哈希（防传输篡改）
+EXPECTED_SHA256="ebd7e7bfe19356be768f03ee6d252eab3069338688677bfa848f4d865549f5ad"
 
 # 1. 检查 Python
 if ! command -v python3 &>/dev/null; then
@@ -17,15 +20,27 @@ pip3 install argon2-cffi cryptography -q 2>/dev/null || \
 
 # 3. 下载 keymgr
 echo "⬇️ 下载 keymgr..."
-sudo curl -fsSL "https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/scripts/keymgr.py" \
-  -o /usr/local/bin/keymgr 2>/dev/null || \
-  curl -fsSL "https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/scripts/keymgr.py" \
-  -o "$HOME/.local/bin/keymgr"
+TMPFILE=$(mktemp)
+curl -fsSL "https://raw.githubusercontent.com/furrynaling-alt/secret-management/main/scripts/keymgr.py" -o "$TMPFILE"
 
-# 4. 权限
+# 4. SHA256 校验
+echo "🔍 校验文件完整性..."
+ACTUAL_SHA256=$(sha256sum "$TMPFILE" | awk '{print $1}')
+if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then
+    echo "❌ 校验失败！文件可能被篡改"
+    echo "   期望: $EXPECTED_SHA256"
+    echo "   实际: $ACTUAL_SHA256"
+    rm -f "$TMPFILE"
+    exit 1
+fi
+echo "✅ 哈希校验通过"
+
+# 5. 安装到系统
+sudo mv "$TMPFILE" /usr/local/bin/keymgr 2>/dev/null || \
+  (mkdir -p "$HOME/.local/bin" && mv "$TMPFILE" "$HOME/.local/bin/keymgr")
 chmod 700 /usr/local/bin/keymgr 2>/dev/null || chmod 700 "$HOME/.local/bin/keymgr"
 
-# 5. 验证
+# 6. 验证
 echo ""
 echo "✅ 安装完成！"
 echo ""
