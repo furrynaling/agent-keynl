@@ -204,14 +204,28 @@ def shamir_recover(shares):
         secret = (secret + lagrange) % prime
     return secret.to_bytes((secret.bit_length()+7)//8, 'big')
 
+def _shard_fernet():
+    """分片加密密钥（基于环境密钥，独立于主密码）"""
+    env_key = get_env_key()
+    key = base64.urlsafe_b64encode(hashlib.sha256(b"keynl-shard:" + env_key).digest())
+    return Fernet(key)
+
+def _read_shard(path):
+    """读取并解密分片文件"""
+    f = _shard_fernet()
+    decrypted = f.decrypt(open(path, 'rb').read())
+    return json.loads(decrypted)
+
 def save_shards(password):
     cfg = load_config()
     n, k = cfg.get("shard_n", 5), cfg.get("shard_k", 3)
     shares = shamir_split(password.encode(), n, k)
     os.makedirs(SHAMIR_DIR, exist_ok=True)
+    f = _shard_fernet()
     for i, val in shares.items():
-        with open(os.path.join(SHAMIR_DIR, f"shard_{i}.key"), 'w') as f:
-            json.dump({"id": i, "value": val}, f)
+        data = json.dumps({"id": i, "value": val}).encode()
+        with open(os.path.join(SHAMIR_DIR, f"shard_{i}.key"), 'wb') as fh:
+            fh.write(f.encrypt(data))
     with open(os.path.join(SHAMIR_DIR, "info.txt"), 'w') as f:
         f.write(f"Shamir({k},{n})门限\n任意{k}个分片可恢复主密码")
     print(f"✅ {n}个分片已生成（任意{k}个可恢复）")
@@ -441,11 +455,11 @@ def cmd_recover():
             print(f"❌ 文件不存在: {path}")
             continue
         try:
-            d = json.load(open(path))
+            d = _read_shard(path)
             shares[int(d["id"])] = int(d["value"])
             print(f"✅ 已读取分片 {d['id']}")
         except Exception as e:
-            print(f"❌ 无法解析: {name}")
+            print(f"❌ 无法解密: {name}")
     if len(shares) < k:
         print(f"❌ 需要至少{k}个分片，当前只读到{len(shares)}个")
     else:
@@ -463,7 +477,7 @@ def _auto_recover():
     shares = {}
     for f in files[:k]:
         try:
-            d = json.load(open(os.path.join(SHAMIR_DIR, f)))
+            d = _read_shard(os.path.join(SHAMIR_DIR, f))
             shares[int(d["id"])] = int(d["value"])
             print(f"✅ 读取 {f}")
         except:
@@ -518,7 +532,15 @@ def _delete_shards():
             print(f"✅ 已删除 {files[idx]}")
 
 def cmd_shards_manage():
-    """分片管理子菜单"""
+    """分片管理子菜单（需密码验证）"""
+    if os.path.exists(VAULT):
+        password = _get_password()
+        if _load_safe(password) is None:
+            print("❌ 主密码错误，无法进入分片管理")
+            return
+        print("✅ 已验证")
+    else:
+        print("⚠️ 密钥库未初始化，分片可能用于恢复")
     while True:
         print("━━━━ 分片管理 ━━━━")
         print("  1. 自动恢复（扫描目录自动恢复）")
