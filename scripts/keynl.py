@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "3.8.0"
+VERSION = "3.9.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -42,16 +42,7 @@ def save_config(cfg):
     try: os.chmod(CONFIG_FILE, 0o600)
     except: pass
 
-# ===== scrypt 密码哈希（强度可配置） =====
-def derive_key(password):
-    cfg = load_config()
-    n = cfg.get("scrypt_n", 2**14)
-    r = cfg.get("scrypt_r", 8)
-    salt = b"secret_management_kdf_salt_v5"
-    raw = hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=1, dklen=32)
-    return base64.urlsafe_b64encode(raw)
-
-# ===== 环境密钥（每个安装实例独立） =====
+# ===== 环境密钥（每个安装实例独立，初始化时生成） =====
 def get_env_key():
     """获取或生成环境密钥，每个 keynl 安装实例独立"""
     if os.path.exists(ENV_KEY_FILE):
@@ -63,6 +54,17 @@ def get_env_key():
     try: os.chmod(ENV_KEY_FILE, 0o600)
     except: pass
     return env_key
+
+# ===== scrypt 密码哈希（强度可配置，混入环境密钥） =====
+def derive_key(password):
+    cfg = load_config()
+    n = cfg.get("scrypt_n", 2**14)
+    r = cfg.get("scrypt_r", 8)
+    salt = b"secret_management_kdf_salt_v5"
+    raw = hashlib.scrypt(password.encode(), salt=salt, n=n, r=r, p=1, dklen=32)
+    env_key = get_env_key()  # 混入环境密钥，初始化即环境绑定
+    combined = hashlib.sha256(raw + env_key).digest()
+    return base64.urlsafe_b64encode(combined)
 
 # ===== 跨平台硬件指纹 =====
 def _sh(s, maxlen=16):
@@ -272,7 +274,9 @@ def cmd_setpass():
     if p1 != p2:
         print("❌ 两次输入不一致"); return
     save_vault(p1, {})
-    print("✅ 主密码已设置")
+    print("✅ 主密码已设置，环境密钥已生成")
+    print(f"   🔑 环境密钥: {ENV_KEY_FILE}")
+    print("   ⚠️ 请备份 env.key，丢失则密钥库永久无法解密")
     print("💡 建议立即生成分片(7)")
 
 def cmd_changepass():
