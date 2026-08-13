@@ -406,6 +406,8 @@ def print_status():
     print(f"   内存锁: {'✅' if MLOCK_OK else '⚠️'}")
     print(f"   存储目录: {BASE_DIR}")
     print(f"   密钥库: {'✅ 已初始化' if os.path.exists(VAULT) else '❌ 未初始化'}")
+    print(f"   ─────────────────────────────")
+    print(f"   TO：纳棂 · furrynaling@outlook.com")
 
 # ===== 交互式菜单 =====
 MENU = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━
