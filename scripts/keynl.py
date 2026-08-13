@@ -915,18 +915,28 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   17. 泄露查询        18. 抹除式更新
   19. 我的链上密钥     20. 文件上链
   21. 验证OTS存证
+  a. 重新列出菜单表   b. 固定菜单表
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
+FIXED_MENU = False
+
 def interactive_menu():
+    global FIXED_MENU
+    print(MENU)
     while True:
-        print(MENU)
         try:
-            choice = input("请选择 [0-21]: ").strip()
+            choice = input("请选择 [0-21, a重列菜单, b固定菜单]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
             print("👋 再见"); break
+        elif choice == "a":
+            print(MENU); continue
+        elif choice == "b":
+            FIXED_MENU = not FIXED_MENU
+            print(f"固定菜单表: {'✅ 已开启（每次操作完自动显示）' if FIXED_MENU else '❌ 已关闭（按a手动显示）'}")
+            continue
         elif choice == "1": cmd_setpass()
         elif choice == "2": cmd_add()
         elif choice == "3": cmd_get()
@@ -951,6 +961,8 @@ def interactive_menu():
         elif choice == "21": cmd_ots_verify()
         else: print("❌ 无效选择")
         print()
+        if FIXED_MENU:
+            print(MENU)
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
