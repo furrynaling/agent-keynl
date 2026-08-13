@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.0.0"
+VERSION = "4.1.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -643,6 +643,10 @@ def cmd_chain():
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
         if resp.get("url"):
             print(f"✅ 已上链: {resp['url']}")
+            if resp.get("ipfs"):
+                print(f"   📦 IPFS备份: {resp['ipfs']}")
+            if resp.get("signature"):
+                print(f"   ✍️ ECC签名: {resp['signature'][:24]}...")
             print("   打开链接，比对表情是否一致")
         else:
             print(f"⚠️ {resp.get('error', '上链失败')}")
@@ -660,7 +664,7 @@ def cmd_query():
     data_hash = hashlib.sha256(data_str.encode()).hexdigest()
     emojis = hash_to_emoji(data_hash)
     print("本地表情: " + " ".join(emojis))
-    print(f"链上页面: https://furrynaling.com/{data_hash[:32]}.html")
+    print(f"链上页面: https://furrynaling.com/chain/{data_hash[:32]}.html")
     print("打开页面比对表情，判断数据是否被篡改")
 
 def cmd_wipe():
@@ -686,6 +690,72 @@ def cmd_wipe():
         print("  已删除: export/")
     print(f"✅ 已抹除 {removed} 个文件，重新运行 keynl 初始化")
 
+def cmd_chain_file():
+    """任意文件上链校验"""
+    path = input("文件路径: ").strip()
+    if not path or not os.path.exists(path):
+        print("❌ 文件不存在"); return
+    h = hashlib.sha256()
+    try:
+        with open(path, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                h.update(chunk)
+    except Exception as e:
+        print(f"❌ 读取失败: {e}"); return
+    file_hash = h.hexdigest()
+    emojis = hash_to_emoji(file_hash)
+    print(f"文件: {os.path.basename(path)}")
+    print(f"原始哈希: {file_hash}")
+    print(f"表情: {' '.join(emojis)}")
+    print("⏳ 上传服务器...")
+    try:
+        import urllib.request
+        payload = json.dumps({"hash": file_hash, "emojis": "".join(emojis)}).encode()
+        req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
+            data=payload, headers={"Content-Type": "application/json"})
+        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
+        if resp.get("url"):
+            print(f"✅ 已上链: {resp['url']}")
+            if resp.get("ipfs"):
+                print(f"   📦 IPFS备份: {resp['ipfs']}")
+        else:
+            print(f"⚠️ {resp.get('error', '上链失败')}")
+    except Exception as e:
+        print(f"❌ 上传失败: {str(e)[:60]}")
+
+def cmd_mychain():
+    """我的链上密钥：查看上链记录 + 选择抹除"""
+    import urllib.request
+    print("⏳ 查询链上记录...")
+    try:
+        req = urllib.request.Request("https://furrynaling.com/api/chain/list")
+        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
+        items = resp.get("items", [])
+        if not items:
+            print("📭 链上暂无记录")
+            return
+        print(f"共 {resp.get('count', len(items))} 条链上记录:")
+        for i, it in enumerate(items, 1):
+            print(f"  {i}. {it['emojis']}  ({it['hash']}) {it['created_at']}")
+        print()
+        choice = input("输入要抹除的编号(逗号分隔，如 1,3)，直接回车取消: ").strip()
+        if not choice:
+            print("已取消"); return
+        idxs = [int(x)-1 for x in choice.split(',') if x.strip()]
+        for i in idxs:
+            if 0 <= i < len(items):
+                full_hash = items[i]["full_hash"]
+                payload = json.dumps({"hash": full_hash}).encode()
+                req2 = urllib.request.Request("https://furrynaling.com/api/chain/delete",
+                    data=payload, headers={"Content-Type": "application/json"})
+                r2 = json.loads(urllib.request.urlopen(req2, timeout=10).read().decode())
+                if r2.get("success"):
+                    print(f"✅ 已抹除: {items[i]['emojis']}")
+                else:
+                    print(f"⚠️ {r2.get('error', '删除失败')}")
+    except Exception as e:
+        print(f"❌ 查询失败(链服务器未部署): {str(e)[:60]}")
+
 def print_status():
     hsm_type, hsm_desc = detect_hsm()
     cfg = load_config()
@@ -702,32 +772,27 @@ def print_status():
     print(f"   TO：纳棂 · furrynaling@outlook.com")
 
 # ===== 交互式菜单 =====
-MENU = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MENU = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🔐 secret-management 主菜单
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1. 设置主密码
-  2. 存密钥
-  3. 读密钥
-  4. 列出所有密钥
-  5. 删除密钥
-  6. 修改主密码
-  7. 生成分片
-  8. 从分片恢复
-  9. 修改加密强度
-  10. 修改分片数量
-  11. 查看状态
-  12. 检查更新
-  13. 授权本次窗口免密   14. 关于作者
-  15. 导出API(给AI用)    16. 上链校验
-  17. 泄露查询           18. 抹除式更新
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  1. 设置主密码       2. 存密钥
+  3. 读密钥          4. 列出所有密钥
+  5. 删除密钥        6. 修改主密码
+  7. 生成分片        8. 从分片恢复
+  9. 修改加密强度     10. 修改分片数量
+  11. 查看状态        12. 检查更新
+  13. 授权窗口免密    14. 关于作者
+  15. 导出API给AI     16. 上链校验
+  17. 泄露查询        18. 抹除式更新
+  19. 我的链上密钥     20. 文件上链
   0. 退出
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
 def interactive_menu():
     print(MENU)
     while True:
         try:
-            choice = input("请选择 [0-18]: ").strip()
+            choice = input("请选择 [0-20]: ").strip()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -751,6 +816,8 @@ def interactive_menu():
         elif choice == "16": cmd_chain()
         elif choice == "17": cmd_query()
         elif choice == "18": cmd_wipe()
+        elif choice == "19": cmd_mychain()
+        elif choice == "20": cmd_chain_file()
         else: print("❌ 无效选择")
         print()
 
@@ -787,6 +854,10 @@ if __name__ == "__main__":
         cmd_query()
     elif cmd == "wipe":
         cmd_wipe()
+    elif cmd == "mychain":
+        cmd_mychain()
+    elif cmd == "chain-file":
+        cmd_chain_file()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
