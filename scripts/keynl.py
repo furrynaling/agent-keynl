@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.11.0"
+VERSION = "4.12.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -824,7 +824,7 @@ def cmd_query():
     import urllib.request
     print("⏳ 拉取链上记录...")
     try:
-        req = urllib.request.Request(f"https://furrynaling.com/api/chain/list?env_id={get_env_id()}",
+        req = urllib.request.Request(f"https://furrynaling.com/api/chain/list?env_id={get_env_id()}&limit=500",
             headers={"User-Agent": "agent-keynl/4.8"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
         items = resp.get("items", [])
@@ -1039,7 +1039,7 @@ def cmd_mychain():
     import urllib.request
     print("⏳ 查询链上记录...")
     try:
-        req = urllib.request.Request(f"https://furrynaling.com/api/chain/list?env_id={get_env_id()}", headers={"User-Agent": "agent-keynl/4.8"})
+        req = urllib.request.Request(f"https://furrynaling.com/api/chain/list?env_id={get_env_id()}&limit=500", headers={"User-Agent": "agent-keynl/4.8"})
         resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
         items = resp.get("items", [])
         if not items:
