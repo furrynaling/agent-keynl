@@ -919,8 +919,8 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
 def interactive_menu():
-    print(MENU)
     while True:
+        print(MENU)
         try:
             choice = input("请选择 [0-21]: ").strip()
         except (EOFError, KeyboardInterrupt):
