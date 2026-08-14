@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.17.0"
+VERSION = "4.18.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -1197,6 +1197,45 @@ def cmd_access_audit():
     except Exception as e:
         print(f"❌ 上链失败: {str(e)[:60]}")
 
+def _file_hash(path):
+    """计算文件/文件夹的哈希"""
+    h = hashlib.sha256()
+    if os.path.isdir(path):
+        files = []
+        for root, dirs, fs in os.walk(path):
+            for f in fs:
+                files.append(os.path.join(root, f))
+        files.sort()
+        for fp in files:
+            rel = os.path.relpath(fp, path)
+            h.update(rel.encode())
+            with open(fp, 'rb') as f:
+                for chunk in iter(lambda: f.read(8192), b''):
+                    h.update(chunk)
+        desc = f"文件夹 {os.path.basename(path)} ({len(files)}个文件)"
+    else:
+        with open(path, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                h.update(chunk)
+        desc = f"文件 {os.path.basename(path)}"
+    return h.hexdigest(), desc
+
+def cmd_file_check():
+    """本地文件篡改查询：重新算哈希，对比链上锚点"""
+    path = input("文件或文件夹路径: ").strip()
+    if not path or not os.path.exists(path):
+        print("❌ 路径不存在"); return
+    try:
+        file_hash, desc = _file_hash(path)
+    except Exception as e:
+        print(f"❌ 读取失败: {e}"); return
+    emojis = hash_to_emoji(file_hash)
+    print(f"对象: {desc}")
+    print(f"原始哈希: {file_hash}")
+    print(f"本地表情: {' '.join(emojis)}")
+    print(f"链上页面: https://furrynaling.com/chain/{file_hash[:32]}.html")
+    print("打开页面比对表情，一致=未篡改，不一致=已篡改")
+
 def cmd_ots_verify():
     """验证 OTS 时间戳证明（需本机 ots CLI 或在线）"""
     import shutil, subprocess
@@ -1302,21 +1341,37 @@ def print_status():
     print(f"   TO：纳棂 · furrynaling@outlook.com")
 
 # ===== 交互式菜单 =====
-MENU_BODY = """  1. 设置主密码       2. 存密钥
-  3. 读密钥          4. 列出所有密钥
-  5. 删除密钥        6. 修改主密码
-  7. 生成分片        8. 分片管理
-  9. 修改加密强度     10. 修改分片数量
-  11. 查看状态        12. 检查更新
-  13. 授权窗口免密    14. 关于作者
-  15. 导出API给AI     16. 上链校验
-  17. 泄露查询        18. 抹除式更新
-  19. 我的链上密钥     20. 文件上链
-  21. 验证OTS存证     22. 解密审计
-  23. 卸载keynl        24. 解密审查中心
-  a. 重新列出菜单表   b. 固定菜单表
-  0. 退出
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
+def _pad(text, width):
+    """中文宽度对齐"""
+    w = sum(2 if ord(c) > 127 else 1 for c in text)
+    return text + ' ' * max(0, width - w)
+
+def _menu_rows():
+    rows = [
+        ("1. 设置主密码", "2. 存密钥"),
+        ("3. 读密钥", "4. 列出所有密钥"),
+        ("5. 删除密钥", "6. 修改主密码"),
+        ("7. 生成分片", "8. 分片管理"),
+        ("9. 修改加密强度", "10. 修改分片数量"),
+        ("11. 查看状态", "12. 检查更新"),
+        ("13. 授权窗口免密", "14. 关于作者"),
+        ("15. 导出API给AI", "16. 上链校验"),
+        ("17. 篡改查询", "18. 抹除式更新"),
+        ("19. 我的链上密钥", "20. 本地文件上链"),
+        ("21. 本地文件篡改查询", "22. 验证OTS存证"),
+        ("23. 解密审计", "24. 卸载keynl"),
+        ("25. 解密审查中心", ""),
+        ("a. 重新列出菜单表", "b. 固定菜单表"),
+        ("0. 退出", ""),
+    ]
+    lines = []
+    for left, right in rows:
+        if right:
+            lines.append("  " + _pad(left, 21) + right)
+        else:
+            lines.append("  " + left)
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    return "\n".join(lines)
 
 def get_menu():
     """动态菜单：已初始化审查中心则显示云上菜单"""
@@ -1325,7 +1380,7 @@ def get_menu():
         header = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔐 agent-keynl 云上菜单\n🔗 https://furrynaling.com/api/audit/page\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     else:
         header = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔐 agent-keynl 主菜单\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    return header + "\n" + MENU_BODY
+    return header + "\n" + _menu_rows()
 
 FIXED_MENU = False
 
@@ -1334,7 +1389,7 @@ def interactive_menu():
     print(get_menu())
     while True:
         try:
-            choice = input("请选择 [0-24, a重列菜单, b固定菜单]: ").strip().lower()
+            choice = input("请选择 [0-25, a重列菜单, b固定菜单]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -1366,10 +1421,11 @@ def interactive_menu():
         elif choice == "18": cmd_wipe()
         elif choice == "19": cmd_mychain()
         elif choice == "20": cmd_chain_file()
-        elif choice == "21": cmd_ots_verify()
-        elif choice == "22": cmd_access_audit()
-        elif choice == "23": cmd_uninstall()
-        elif choice == "24": cmd_audit_manage()
+        elif choice == "21": cmd_file_check()
+        elif choice == "22": cmd_ots_verify()
+        elif choice == "23": cmd_access_audit()
+        elif choice == "24": cmd_uninstall()
+        elif choice == "25": cmd_audit_manage()
         else: print("❌ 无效选择")
         print()
         if FIXED_MENU:
@@ -1412,6 +1468,8 @@ if __name__ == "__main__":
         cmd_mychain()
     elif cmd == "chain-file":
         cmd_chain_file()
+    elif cmd == "file-check":
+        cmd_file_check()
     elif cmd == "ots-verify":
         cmd_ots_verify()
     elif cmd == "access-log":
