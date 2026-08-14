@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.13.1"
+VERSION = "4.14.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -120,8 +120,15 @@ def report_api(api_name, agent_name=""):
     except:
         pass
 
-def cmd_audit_init():
-    """初始化解密审查中心（只能设置一次）"""
+def cmd_audit_manage():
+    """解密审查中心管理（初始化/忘记密码/重新部署/移除/访问）"""
+    cfg = load_config()
+    if "audit_env_id" not in cfg:
+        _audit_init(cfg)
+    else:
+        _audit_menu(cfg)
+
+def _audit_init(cfg):
     import string, random
     print("🔐 初始化解密审查中心")
     print("   审查中心用于集中查看所有解密/API调用记录")
@@ -129,16 +136,18 @@ def cmd_audit_init():
     confirm = input("确认初始化? (y/n): ").strip().lower()
     if confirm != 'y':
         print("已取消"); return
-    # 生成6位访问密码
     access_pass = ''.join(random.choices(string.digits, k=6))
     try:
         import urllib.request
         payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token(),
             "access_pass": access_pass}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/audit/init",
-            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.13"})
+            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.14"})
         resp = json.loads(urllib.request.urlopen(req, timeout=8).read().decode())
         if resp.get("success"):
+            cfg["audit_env_id"] = get_env_id()
+            cfg["audit_initialized"] = True
+            save_config(cfg)
             print("✅ 审查中心已初始化")
             print("")
             print("━━━━━━━━━━━━━━━━━━━━━━━━")
@@ -151,6 +160,60 @@ def cmd_audit_init():
             print(f"⚠️ {resp.get('error', '初始化失败')}")
     except Exception as e:
         print(f"❌ 初始化失败(服务器不可达): {str(e)[:60]}")
+
+def _audit_menu(cfg):
+    while True:
+        print("🔐 解密审查中心")
+        print("   你已设置审查中心")
+        print(f"   环境ID: {cfg.get('audit_env_id')}")
+        print("")
+        print("  1. 忘记密码")
+        print("  2. 重新部署审查中心")
+        print("  3. 移除审查中心")
+        print("  4. 访问网址")
+        print("  0. 返回")
+        try:
+            choice = input("选择 [0-4]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print(); break
+        if choice == "0":
+            break
+        elif choice == "1":
+            print("⚠️ 访问密码无法找回（服务器只存哈希）")
+            print("   请选 2 重新部署 生成新密码")
+        elif choice == "2":
+            _audit_reset(cfg, "RESET")
+        elif choice == "3":
+            _audit_reset(cfg, "REMOVE")
+        elif choice == "4":
+            print(f"访问网址: https://furrynaling.com/api/audit/page")
+            print(f"环境ID:   {cfg.get('audit_env_id')}")
+        else:
+            print("❌ 无效选择")
+        print()
+
+def _audit_reset(cfg, keyword):
+    print("⚠️ 此操作会重置审查中心，可能需要重新初始化")
+    confirm = input(f"输入 {keyword} 确认: ").strip()
+    if confirm != keyword:
+        print("已取消"); return
+    try:
+        import urllib.request
+        payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
+        req = urllib.request.Request("https://furrynaling.com/api/audit/reset",
+            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.14"})
+        resp = json.loads(urllib.request.urlopen(req, timeout=8).read().decode())
+        if resp.get("success"):
+            cfg.pop("audit_env_id", None)
+            cfg.pop("audit_initialized", None)
+            save_config(cfg)
+            print("✅ 审查中心已重置")
+            if keyword == "RESET":
+                print("   请重新初始化（再次进入菜单24）")
+        else:
+            print(f"⚠️ {resp.get('error', '操作失败')}")
+    except Exception as e:
+        print(f"❌ 操作失败: {str(e)[:60]}")
 
 def log_access(action="解密"):
     """记录一次成功解密（60秒内去重）"""
@@ -1216,7 +1279,7 @@ def interactive_menu():
         elif choice == "21": cmd_ots_verify()
         elif choice == "22": cmd_access_audit()
         elif choice == "23": cmd_uninstall()
-        elif choice == "24": cmd_audit_init()
+        elif choice == "24": cmd_audit_manage()
         else: print("❌ 无效选择")
         print()
         if FIXED_MENU:
@@ -1266,7 +1329,7 @@ if __name__ == "__main__":
     elif cmd == "uninstall":
         cmd_uninstall()
     elif cmd == "audit-init":
-        cmd_audit_init()
+        cmd_audit_manage()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
