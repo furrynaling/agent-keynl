@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.14.0"
+VERSION = "4.15.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -1218,10 +1218,7 @@ def print_status():
     print(f"   TO：纳棂 · furrynaling@outlook.com")
 
 # ===== 交互式菜单 =====
-MENU = """━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔐 agent-keynl 主菜单
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1. 设置主密码       2. 存密钥
+MENU_BODY = """  1. 设置主密码       2. 存密钥
   3. 读密钥          4. 列出所有密钥
   5. 删除密钥        6. 修改主密码
   7. 生成分片        8. 分片管理
@@ -1237,11 +1234,20 @@ MENU = """━━━━━━━━━━━━━━━━━━━━━━━�
   0. 退出
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
+def get_menu():
+    """动态菜单：已初始化审查中心则显示云上菜单"""
+    cfg = load_config()
+    if "audit_env_id" in cfg:
+        header = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔐 agent-keynl 云上菜单\n🔗 https://furrynaling.com/api/audit/page\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    else:
+        header = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔐 agent-keynl 主菜单\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    return header + "\n" + MENU_BODY
+
 FIXED_MENU = False
 
 def interactive_menu():
     global FIXED_MENU
-    print(MENU)
+    print(get_menu())
     while True:
         try:
             choice = input("请选择 [0-24, a重列菜单, b固定菜单]: ").strip().lower()
@@ -1250,7 +1256,7 @@ def interactive_menu():
         if choice == "0":
             print("👋 再见"); break
         elif choice == "a":
-            print(MENU); continue
+            print(get_menu()); continue
         elif choice == "b":
             FIXED_MENU = not FIXED_MENU
             print(f"固定菜单表: {'✅ 已开启（每次操作完自动显示）' if FIXED_MENU else '❌ 已关闭（按a手动显示）'}")
@@ -1283,7 +1289,7 @@ def interactive_menu():
         else: print("❌ 无效选择")
         print()
         if FIXED_MENU:
-            print(MENU)
+            print(get_menu())
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
