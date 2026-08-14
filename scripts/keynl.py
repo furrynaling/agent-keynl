@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.16.0"
+VERSION = "4.17.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -96,12 +96,28 @@ def get_auth_token():
         save_config(cfg)
     return cfg["auth_token"]
 
+def get_device_name():
+    """获取设备名：Android用getprop设备型号，其他用platform.node"""
+    try:
+        model = os.popen("getprop ro.product.model 2>/dev/null").read().strip()
+        if model:
+            return model
+    except:
+        pass
+    try:
+        model = os.popen("getprop ro.product.device 2>/dev/null").read().strip()
+        if model:
+            return model
+    except:
+        pass
+    return platform.node()
+
 def report_decrypt():
     """上报解密记录到审查中心（失败静默，不阻止解密）"""
     try:
         import urllib.request
         payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token(),
-            "key_name": "vault", "device": platform.node(), "system": platform.system()}).encode()
+            "key_name": "密钥库", "device": get_device_name(), "system": platform.system()}).encode()
         req = urllib.request.Request("https://furrynaling.com/api/audit/decrypt",
             data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.13"})
         urllib.request.urlopen(req, timeout=3)
