@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.13.0"
+VERSION = "4.13.1"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -933,7 +933,13 @@ def cmd_query():
         print(f"❌ 查询失败(链服务器未部署): {str(e)[:60]}")
 
 def cmd_wipe():
-    """抹除式更新：删除本地所有密钥，用于版本过低/不许可更新的强制重置"""
+    """抹除式更新：删除本地所有密钥，用于版本过低/不许可更新的强制重置（需主密码验证）"""
+    if os.path.exists(VAULT):
+        password = _get_password()
+        if _load_safe(password) is None:
+            print("❌ 主密码错误，无法抹除")
+            return
+        print("✅ 主密码验证通过")
     print("⚠️ 抹除式更新")
     print("   用途: 云端版本不许可更新，或本地版本过低时强制重置")
     print("   后果: 删除本地所有密钥、环境密钥、分片、配置")
@@ -1064,7 +1070,13 @@ def cmd_ots_verify():
         print(f"❌ 验证失败: {e}")
 
 def cmd_uninstall():
-    """卸载 keynl：删除程序 + 所有数据"""
+    """卸载 keynl：删除程序 + 所有数据（需主密码验证）"""
+    if os.path.exists(VAULT):
+        password = _get_password()
+        if _load_safe(password) is None:
+            print("❌ 主密码错误，无法卸载")
+            return
+        print("✅ 主密码验证通过")
     print("⚠️ 卸载 keynl")
     print("   将删除: 程序文件 + 所有密钥/分片/配置/解密记录")
     print("   此操作【不可逆】！")
