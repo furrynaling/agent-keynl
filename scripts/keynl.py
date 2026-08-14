@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.15.0"
+VERSION = "4.16.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -815,6 +815,12 @@ def _api_key(password, bind_hw):
         raw = hashlib.sha256(b"keynl-api:" + password.encode() + b":" + env_key).digest()
     return base64.urlsafe_b64encode(raw)
 
+def _token_key(token):
+    """AI token 派生密钥（token + 环境密钥，绑定环境）"""
+    env_key = get_env_key()
+    raw = hashlib.sha256(b"keynl-token:" + token.encode() + b":" + env_key).digest()
+    return base64.urlsafe_b64encode(raw)
+
 def cmd_export():
     """导出加密 API 文件给 AI 调用（硬件绑定，复制到别处失效）"""
     password = _get_password()
@@ -840,12 +846,32 @@ def cmd_export():
     print("加密类型:")
     print("  1. 本机绑定 (硬件指纹，最安全，复制到别处无法解密)")
     print("  2. 密码加密 (仅主密码，可复制但需密码)")
-    enc_type = input("选择 [1-2]: ").strip()
+    print("  3. AI token (给AI直接调用，无需主密码)")
+    enc_type = input("选择 [1-3]: ").strip()
     api_name = input("API文件名(默认 api_key): ").strip() or "api_key"
     export_dir = os.path.join(BASE_DIR, "export")
     os.makedirs(export_dir, exist_ok=True)
     api_file = os.path.join(export_dir, api_name + ".enc")
     payload = json.dumps(selected, ensure_ascii=False).encode()
+    if enc_type == "3":
+        # AI token 类型
+        token = secrets.token_hex(32)
+        key = _token_key(token)
+        f = Fernet(key)
+        encrypted = f.encrypt(payload)
+        tag = b"TK:"
+        with open(api_file, 'wb') as fh:
+            fh.write(tag + encrypted)
+        token_file = os.path.join(export_dir, api_name + ".token")
+        with open(token_file, 'w') as fh:
+            fh.write(token)
+        try: os.chmod(token_file, 0o600)
+        except: pass
+        print(f"✅ 已导出: file://{api_file}")
+        print(f"   🤖 AI token: {token}")
+        print(f"   AI调用: keynl api-get {api_name}")
+        print(f"   （本机自动读取token，AI无需主密码）")
+        return
     bind = (enc_type == "1")
     key = _api_key(password, bind)
     f = Fernet(key)
@@ -874,40 +900,82 @@ def cmd_api_get(args):
         print(f"❌ 文件不存在: {api_file}")
         return
     raw = open(api_file, 'rb').read()
-    if raw.startswith(b"HW:"):
-        bind = True
+    if raw.startswith(b"TK:"):
+        # AI token 类型：自动读本地 token，非交互式解密
         encrypted = raw[3:]
-    elif raw.startswith(b"PW:"):
-        bind = False
-        encrypted = raw[3:]
+        token = None
+        token_file = os.path.join(export_dir, api_name + ".token")
+        if os.path.exists(token_file):
+            token = open(token_file).read().strip()
+        elif len(args) >= 2:
+            token = args[1]
+        if not token:
+            print("❌ 无 token，需 keynl api-get " + api_name + " <token>")
+            return
+        key = _token_key(token)
+        f = Fernet(key)
+        try:
+            payload = f.decrypt(encrypted)
+        except:
+            print("❌ token 错误或不在原环境")
+            return
     else:
-        encrypted = raw
-        bind = False
-    password = _get_password()
-    key = _api_key(password, bind)
-    f = Fernet(key)
-    try:
-        payload = f.decrypt(encrypted)
-    except:
-        if bind:
-            print("❌ 解密失败：可能不在原设备，或密码错误")
+        if raw.startswith(b"HW:"):
+            bind = True
+            encrypted = raw[3:]
+        elif raw.startswith(b"PW:"):
+            bind = False
+            encrypted = raw[3:]
         else:
-            print("❌ 主密码错误")
-        return
+            encrypted = raw
+            bind = False
+        password = _get_password()
+        key = _api_key(password, bind)
+        f = Fernet(key)
+        try:
+            payload = f.decrypt(encrypted)
+        except:
+            if bind:
+                print("❌ 解密失败：可能不在原设备，或密码错误")
+            else:
+                print("❌ 主密码错误")
+            return
     selected = json.loads(payload)
     # 上报 API 调用记录
     report_api(api_name, agent_name=os.environ.get("AGENT_NAME", ""))
+    show = "--show" in args
+    # 加载到环境变量
+    env_names = []
     for k, v in selected.items():
         try:
             fields = json.loads(v)
             if isinstance(fields, dict):
-                print(f"  {k}:")
                 for k2, v2 in fields.items():
-                    print(f"    {k2} = {v2}")
+                    os.environ[k2] = str(v2)
+                    env_names.append(k2)
                 continue
         except:
             pass
-        print(f"  {k} = {v}")
+        os.environ[k] = str(v)
+        env_names.append(k)
+    if show:
+        # 显示明文（用户自己需要看时）
+        for k, v in selected.items():
+            try:
+                fields = json.loads(v)
+                if isinstance(fields, dict):
+                    print(f"  {k}:")
+                    for k2, v2 in fields.items():
+                        print(f"    {k2} = {v2}")
+                    continue
+            except:
+                pass
+            print(f"  {k} = {v}")
+    else:
+        # 不回显明文，只提示已加载
+        print(f"✅ 已加载 {len(env_names)} 个密钥到环境变量（未回显明文）")
+        print(f"   变量: {', '.join(env_names)}")
+        print(f"   AI可用 $变量名 引用，无需看到密钥")
 
 def cmd_chain():
     """上链校验：上传哈希到服务器，返回比对链接"""
