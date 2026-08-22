@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.18.0"
+VERSION = "4.19.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -1355,12 +1355,8 @@ def _menu_rows():
         ("9. 修改加密强度", "10. 修改分片数量"),
         ("11. 查看状态", "12. 检查更新"),
         ("13. 授权窗口免密", "14. 关于作者"),
-        ("15. 导出API给AI", "16. 上链校验"),
-        ("17. 篡改查询", "18. 抹除式更新"),
-        ("19. 我的链上密钥", "20. 本地文件上链"),
-        ("21. 本地文件篡改查询", "22. 验证OTS存证"),
-        ("23. 解密审计", "24. 卸载keynl"),
-        ("25. 解密审查中心", ""),
+        ("15. 导出API给AI", "16. 抹除式更新"),
+        ("17. 卸载keynl", ""),
         ("a. 重新列出菜单表", "b. 固定菜单表"),
         ("0. 退出", ""),
     ]
@@ -1416,16 +1412,8 @@ def interactive_menu():
         elif choice == "13": cmd_authorize()
         elif choice == "14": cmd_about()
         elif choice == "15": cmd_export()
-        elif choice == "16": cmd_chain()
-        elif choice == "17": cmd_query()
-        elif choice == "18": cmd_wipe()
-        elif choice == "19": cmd_mychain()
-        elif choice == "20": cmd_chain_file()
-        elif choice == "21": cmd_file_check()
-        elif choice == "22": cmd_ots_verify()
-        elif choice == "23": cmd_access_audit()
-        elif choice == "24": cmd_uninstall()
-        elif choice == "25": cmd_audit_manage()
+        elif choice == "16": cmd_wipe()
+        elif choice == "17": cmd_uninstall()
         else: print("❌ 无效选择")
         print()
         if FIXED_MENU:
@@ -1458,26 +1446,10 @@ if __name__ == "__main__":
         cmd_export()
     elif cmd == "api-get":
         cmd_api_get(args)
-    elif cmd == "chain":
-        cmd_chain()
-    elif cmd == "query":
-        cmd_query()
     elif cmd == "wipe":
         cmd_wipe()
-    elif cmd == "mychain":
-        cmd_mychain()
-    elif cmd == "chain-file":
-        cmd_chain_file()
-    elif cmd == "file-check":
-        cmd_file_check()
-    elif cmd == "ots-verify":
-        cmd_ots_verify()
-    elif cmd == "access-log":
-        cmd_access_audit()
     elif cmd == "uninstall":
         cmd_uninstall()
-    elif cmd == "audit-init":
-        cmd_audit_manage()
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
