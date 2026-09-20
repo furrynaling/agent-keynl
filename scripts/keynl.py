@@ -6,7 +6,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.21.0"
+VERSION = "4.22.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -350,6 +350,53 @@ def get_ecc_fp():
     return hashlib.sha384(pub).hexdigest()[:24]
 
 # ===== 主接口 =====
+# ===== 库签名（ECDSA P-384 + SHA-384，v4.22.0）=====
+# 作用：给库文件盖本机私钥的章 → 有人把库换成另一份 / 偷偷改字节，能被当场发现。
+# 诚实说明：私钥 ecc.key 就在本机，**能拿下本机的攻击者可以连私钥一起换掉**；
+# 所以真正的"防掉包"要靠你把「签名公钥指纹」抄走（纸上/手机），对不上就是被换过。
+SIG_FILE = os.path.join(BASE_DIR, "vault.sig")
+
+def _vault_sha(blob=None):
+    blob = blob if blob is not None else open(VAULT, "rb").read()
+    return hashlib.sha384(blob).hexdigest()
+
+def sign_vault():
+    """给库文件盖章 → vault.sig（每次保存库时自动执行）"""
+    if not os.path.exists(VAULT):
+        return None
+    key = get_ecc_key()
+    blob = open(VAULT, "rb").read()
+    sig = key.sign(_vault_sha(blob).encode(), ec.ECDSA(hashes.SHA384()))
+    rec = {"v": 1, "algo": "ECDSA-P384-SHA384", "fp": get_ecc_fp(),
+           "sha384": _vault_sha(blob), "sig": base64.b64encode(sig).decode(),
+           "t": int(time.time())}
+    os.makedirs(BASE_DIR, exist_ok=True)
+    with open(SIG_FILE, "w") as fh:
+        json.dump(rec, fh)
+    try: os.chmod(SIG_FILE, 0o600)
+    except Exception: pass
+    return rec
+
+def verify_vault_sig():
+    """返回 (状态, 说明)。状态: ok / missing / tampered / keychanged"""
+    if not os.path.exists(VAULT):
+        return "missing", "还没有库文件"
+    if not os.path.exists(SIG_FILE):
+        return "missing", "该库还没有签名（下次保存会自动补上）"
+    try:
+        rec = json.loads(open(SIG_FILE).read())
+        blob = open(VAULT, "rb").read()
+        if rec.get("sha384") != _vault_sha(blob):
+            return "tampered", "库文件内容与签名记录不一致 → 被改过"
+        key = get_ecc_key()
+        key.public_key().verify(base64.b64decode(rec["sig"]), _vault_sha(blob).encode(),
+                                ec.ECDSA(hashes.SHA384()))
+        if rec.get("fp") != get_ecc_fp():
+            return "keychanged", f"签名是另一把钥匙盖的（记录 {rec.get('fp','?')[:12]}… / 现在 {get_ecc_fp()[:12]}…）"
+        return "ok", f"签名有效 · 公钥指纹 {get_ecc_fp()[:16]}…"
+    except Exception as e:
+        return "tampered", f"签名校验失败（{type(e).__name__}）→ 库可能被替换或损坏"
+
 # ===== 库加密（AEAD，v4.21.0）：AES-256-GCM 优先；无 AES-NI 的机器用 ChaCha20-Poly1305 =====
 # 文件头：GCM1:=AES-256-GCM   CHP1:=ChaCha20-Poly1305   无前缀=旧版 Fernet（继续可读）
 _AAD = b"agent-keynl-vault-v1"
@@ -388,6 +435,9 @@ def _unseal(password, blob: bytes) -> bytes:
 def load_vault(password):
     if not os.path.exists(VAULT): return {}
     if not check_hw(): raise Exception("❌ 硬件指纹不匹配! 密文可能被复制到其他设备")
+    st, msg = verify_vault_sig()
+    if st == "tampered" and os.environ.get("KEYNL_FORCE") != "1":
+        raise Exception(f"❌ {msg}（确认无误可设 KEYNL_FORCE=1 强开）")
     data = json.loads(_unseal(password, open(VAULT,'rb').read()))
     if data.pop('_ecc_fp','') != get_ecc_fp(): raise Exception("❌ ECC指纹不匹配!")
     if data.pop('_sha384','') != hashlib.sha384(json.dumps({k:v for k,v in data.items() if not k.startswith('_')}, sort_keys=True).encode()).hexdigest():
@@ -401,6 +451,8 @@ def save_vault(password, data):
     clean['_ecc_fp'] = get_ecc_fp()
     os.makedirs(os.path.dirname(VAULT), exist_ok=True)
     with open(VAULT, 'wb') as fh: fh.write(_seal(password, json.dumps(clean).encode()))
+    try: sign_vault()
+    except Exception: pass
     try: os.chmod(VAULT, 0o600)
     except: pass
 
@@ -443,6 +495,14 @@ def cmd_doctor():
         ok = False
     else:
         print(f"✅ 库文件存在（{os.path.getsize(VAULT)} 字节密文）")
+        st, msg = verify_vault_sig()
+        if st == "ok":
+            print(f"✅ 库签名有效（ECDSA P-384 + SHA-384）· 公钥指纹 {get_ecc_fp()[:16]}…")
+        elif st == "missing":
+            print(f"⚠️ {msg}")
+        else:
+            print(f"❌ {msg}")
+            ok = False
 
     # 5) 分片体检（核心：不输主密码也能验证"忘密码能不能救回"）
     cfg = load_config()
@@ -514,7 +574,10 @@ def cmd_setpass():
     if p1 != p2:
         print("❌ 两次输入不一致"); return
     save_vault(p1, {})
-    print("✅ 主密码已设置，环境密钥已生成")
+    check_hw()          # 立刻把本机硬件指纹落盘（从出生就绑定）
+    print("✅ 主密码已设置，密钥已生成，库已签名")
+    print(f"   🔏 签名公钥指纹: {get_ecc_fp()[:24]}…")
+    print("      ↳ 建议抄下来存好：以后这个指纹变了 = 库被人换过")
     print(f"   🔑 环境密钥: {ENV_KEY_FILE}")
     print("   ⚠️ 请备份 env.key，丢失则密钥库永久无法解密")
     print("💡 建议立即生成分片(7)")
@@ -945,94 +1008,150 @@ def cmd_export():
         print(f"   🔐 密码加密：需主密码解密")
         print(f"   AI调用: keynl api-get {api_name}")
 
-def cmd_api_get(args):
-    """解密读取导出的 API 文件"""
-    if not args:
-        print("用法: keynl api-get <API名>")
-        return
-    api_name = args[0]
+def _api_decode(api_name, token=None):
+    """解密 export/<名>.enc → dict。TK 类型免主密码；失败抛异常"""
     export_dir = os.path.join(BASE_DIR, "export")
     api_file = os.path.join(export_dir, api_name + ".enc")
     if not os.path.exists(api_file):
-        print(f"❌ 文件不存在: {api_file}")
-        return
-    raw = open(api_file, 'rb').read()
+        raise FileNotFoundError(f"export/{api_name}.enc 不存在（先跑 keynl export）")
+    raw = open(api_file, "rb").read()
     if raw.startswith(b"TK:"):
-        # AI token 类型：自动读本地 token，非交互式解密
-        encrypted = raw[3:]
-        token = None
-        token_file = os.path.join(export_dir, api_name + ".token")
-        if os.path.exists(token_file):
-            token = open(token_file).read().strip()
-        elif len(args) >= 2:
-            token = args[1]
-        if not token:
-            print("❌ 无 token，需 keynl api-get " + api_name + " <token>")
-            return
-        key = _token_key(token)
-        f = Fernet(key)
-        try:
-            payload = f.decrypt(encrypted)
-        except:
-            print("❌ token 错误或不在原环境")
-            return
-    else:
-        if raw.startswith(b"HW:"):
-            bind = True
-            encrypted = raw[3:]
-        elif raw.startswith(b"PW:"):
-            bind = False
-            encrypted = raw[3:]
-        else:
-            encrypted = raw
-            bind = False
-        password = _get_password()
-        key = _api_key(password, bind)
-        f = Fernet(key)
-        try:
-            payload = f.decrypt(encrypted)
-        except:
-            if bind:
-                print("❌ 解密失败：可能不在原设备，或密码错误")
-            else:
-                print("❌ 主密码错误")
-            return
-    selected = json.loads(payload)
-    # 上报 API 调用记录
-    report_api(api_name, agent_name=os.environ.get("AGENT_NAME", ""))
+        tok = token
+        tf = os.path.join(export_dir, api_name + ".token")
+        if not tok and os.path.exists(tf):
+            tok = open(tf).read().strip()
+        if not tok:
+            raise ValueError("无 token（需要 export/%s.token）" % api_name)
+        return json.loads(Fernet(_token_key(tok)).decrypt(raw[3:]))
+    if raw.startswith(b"HW:"):
+        return json.loads(Fernet(_api_key(_get_password(), True)).decrypt(raw[3:]))
+    if raw.startswith(b"PW:"):
+        return json.loads(Fernet(_api_key(_get_password(), False)).decrypt(raw[3:]))
+    return json.loads(Fernet(_api_key(_get_password(), False)).decrypt(raw))
+
+def cmd_api_get(args):
+    """keynl api-get <名> [--show]  （不带 --show 只加载环境变量、不回显明文）"""
+    if not args:
+        print("用法: keynl api-get <API名> [--show]"); return
+    api_name = args[0]
+    try:
+        selected = _api_decode(api_name)
+    except FileNotFoundError as e:
+        print(f"❌ {e}"); return
+    except Exception as e:
+        print(f"❌ 解密失败（token 错误 / 不在原环境 / 密码错误）: {type(e).__name__}"); return
     show = "--show" in args
-    # 加载到环境变量
     env_names = []
     for k, v in selected.items():
         try:
             fields = json.loads(v)
             if isinstance(fields, dict):
                 for k2, v2 in fields.items():
-                    os.environ[k2] = str(v2)
-                    env_names.append(k2)
+                    os.environ[k2] = str(v2); env_names.append(k2)
                 continue
-        except:
+        except Exception:
             pass
-        os.environ[k] = str(v)
-        env_names.append(k)
+        os.environ[k] = str(v); env_names.append(k)
     if show:
-        # 显示明文（用户自己需要看时）
         for k, v in selected.items():
             try:
                 fields = json.loads(v)
                 if isinstance(fields, dict):
                     print(f"  {k}:")
-                    for k2, v2 in fields.items():
-                        print(f"    {k2} = {v2}")
+                    for k2, v2 in fields.items(): print(f"    {k2} = {v2}")
                     continue
-            except:
+            except Exception:
                 pass
             print(f"  {k} = {v}")
     else:
-        # 不回显明文，只提示已加载
         print(f"✅ 已加载 {len(env_names)} 个密钥到环境变量（未回显明文）")
         print(f"   变量: {', '.join(env_names)}")
         print(f"   AI可用 $变量名 引用，无需看到密钥")
+
+def cmd_api_run(args):
+    """keynl api-run <名> [--once] [--var 变量名] -- <命令...>
+    密钥只注入子进程环境变量：不打印、不进日志、不落磁盘（阅后即焚）。
+    --once: 跑完就把该凭据（.enc+.token）销毁，下次要用得重新导出。
+    """
+    import subprocess
+    if not args:
+        export_dir = os.path.join(BASE_DIR, "export")
+        names = sorted(f[:-4] for f in os.listdir(export_dir) if f.endswith(".enc")) if os.path.isdir(export_dir) else []
+        print("🔐 阅后即焚调用（api-run）：密钥只进子进程内存，不打印、不进日志")
+        if not names:
+            print("   （还没有导出凭据：先用 keynl export 生成）"); return
+        print(f"   可用凭据: {', '.join(names)}")
+        print("   用法: keynl api-run <凭据名> [--once] -- <命令>")
+        print("   例:   keynl api-run smtp --once -- curl -u \"$SMTP_USER:$SMTP_PASS\" https://api.example.com/send")
+        return
+    api_name = args[0]
+    rest = args[1:]
+    once = "--once" in rest
+    rest = [a for a in rest if a != "--once"]
+    uses = 1 if once else 0
+    if "--uses" in rest:
+        i = rest.index("--uses")
+        try: uses = int(rest[i + 1])
+        except Exception: uses = 0
+        del rest[i:i + 2]
+    var = None
+    if "--var" in rest:
+        i = rest.index("--var"); var = rest[i + 1]; del rest[i:i + 2]
+    if "--" in rest:
+        cmdv = rest[rest.index("--") + 1:]
+    else:
+        cmdv = rest
+    if not cmdv:
+        print("❌ 缺少要执行的命令：keynl api-run <名> -- <命令...>"); return
+    try:
+        selected = _api_decode(api_name)
+    except Exception as e:
+        print(f"❌ 取不到凭据（{type(e).__name__}）"); return
+    env = dict(os.environ)
+    injected = []
+    for k, v in selected.items():
+        vals = {}
+        try:
+            f = json.loads(v)
+            if isinstance(f, dict): vals = {str(a): str(b) for a, b in f.items()}
+        except Exception:
+            pass
+        if vals: env.update(vals); injected += list(vals)
+        else:
+            env[k] = str(v); injected.append(k)
+    print(f"▶️ 执行（已注入 {len(injected)} 个变量：{', '.join(injected)}；值不回显）")
+    try:
+        rc = subprocess.call(cmdv, env=env)
+    except Exception as e:
+        print(f"❌ 执行失败: {e}"); return
+    # 阅后即焚：--once 用一次就销毁；--uses N 限次（跑完计数 -1，归零即焚）
+    burn = False
+    if uses > 0:
+        cnt_file = os.path.join(BASE_DIR, "export", api_name + ".uses")
+        left = uses
+        if os.path.exists(cnt_file):
+            try: left = int(open(cnt_file).read().strip())
+            except Exception: left = uses
+        left -= 1
+        if left <= 0:
+            burn = True
+        else:
+            with open(cnt_file, "w") as fh: fh.write(str(left))
+            try: os.chmod(cnt_file, 0o600)
+            except Exception: pass
+    if burn:
+        for ext in (".enc", ".token", ".uses"):
+            f = os.path.join(BASE_DIR, "export", api_name + ext)
+            try:
+                if os.path.exists(f):
+                    os.system(f"shred -u '{f}' 2>/dev/null || rm -f '{f}'")
+            except Exception:
+                pass
+        print(f"🔥 阅后即焚：{api_name} 的凭据已销毁（下次要用先重新 export）")
+    elif uses > 0:
+        print(f"🔒 剩余可用次数：{left}（归零自动销毁）")
+    print(f"✅ 命令结束（退出码 {rc}）")
+
 
 def cmd_chain(*a, **kw):
     """上链校验 —— v4.19.0 起移除（纯本地化，不向任何服务器发送数据）"""
@@ -1201,6 +1320,7 @@ def _menu_rows():
         ("13. 授权窗口免密", "14. 关于作者"),
         ("15. 导出API给AI", "16. 抹除式更新"),
         ("17. 卸载keynl", "18. 库体检(doctor)"),
+        ("19. 阅后即焚调用", ""),
         ("a. 重新列出菜单表", "b. 固定菜单表"),
         ("0. 退出", ""),
     ]
@@ -1256,6 +1376,7 @@ def interactive_menu():
         elif choice == "16": cmd_wipe()
         elif choice == "17": cmd_uninstall()
         elif choice == "18": cmd_doctor()
+        elif choice == "19": cmd_api_run([])
         else: print("❌ 无效选择")
         print()
         if FIXED_MENU:
@@ -1292,6 +1413,8 @@ if __name__ == "__main__":
         cmd_wipe()
     elif cmd == "uninstall":
         cmd_uninstall()
+    elif cmd == "api-run":
+        cmd_api_run(args)
     elif cmd == "doctor":
         sys.exit(0 if cmd_doctor() else 1)
     else:
