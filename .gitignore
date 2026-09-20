@@ -1,3 +1,25 @@
 __pycache__/
 *.pyc
 *.pyo
+
+# ⚠️ 千万别把密钥库/环境密钥/分片提交上来（默认装在 ~/.agent-keynl，这里再兜一层）
+vault.enc
+env.key
+hw.bin
+ecc.key
+config.json
+decoy.hash
+shards/
+shard_*.key
+export/
+*.token
+*.enc
+.agent-keynl/
+
+# 常见凭据文件
+.env
+*.pem
+*.key
+id_rsa*
+*_rsa
+*_ed25519

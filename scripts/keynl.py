@@ -5,7 +5,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.19.0"
+VERSION = "4.20.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -462,6 +462,106 @@ def save_vault(password, data):
     with open(VAULT, 'wb') as fh: fh.write(f.encrypt(json.dumps(clean).encode()))
     try: os.chmod(VAULT, 0o600)
     except: pass
+
+# ===== 🩺 库体检（doctor）：不需要主密码，能证明"分片还救不救得回来" =====
+def cmd_doctor():
+    ok = True
+    print("🩺 agent-keynl 库体检")
+    print(f"   目录: {BASE_DIR}")
+    print("─" * 36)
+
+    # 1) 环境密钥
+    if os.path.exists(ENV_KEY_FILE) and os.path.getsize(ENV_KEY_FILE) == 32:
+        print("✅ 环境密钥 env.key 正常（32 字节）")
+    else:
+        print("❌ 环境密钥 env.key 缺失/异常 → 库无法解密（先从备份恢复）")
+        ok = False
+
+    # 2) 硬件指纹
+    cur = get_hw_fingerprint()
+    if not os.path.exists(HW_FILE):
+        print("⚠️ hw.bin 缺失（下次开库会自动重建为当前机器 → 等于没绑定）")
+        ok = False
+    elif open(HW_FILE).read().strip() == cur:
+        print("✅ 硬件指纹匹配（库绑定本机：机器ID+主机名+内核+MAC）")
+    else:
+        print("❌ 硬件指纹不匹配 → 换过内核/网卡/主机名，或这份库来自别的机器")
+        ok = False
+
+    # 3) ECC 密钥
+    try:
+        get_ecc_key()
+        print("✅ ECC 密钥可加载（库内指纹校验的前提）")
+    except Exception as e:
+        print(f"❌ ECC 密钥加载失败: {type(e).__name__}")
+        ok = False
+
+    # 4) 库文件
+    if not os.path.exists(VAULT):
+        print("⚠️ 还没有库文件 vault.enc")
+        ok = False
+    else:
+        print(f"✅ 库文件存在（{os.path.getsize(VAULT)} 字节密文）")
+
+    # 5) 分片体检（核心：不输主密码也能验证"忘密码能不能救回"）
+    cfg = load_config()
+    k = cfg.get("shard_k", 3)
+    files = sorted(f for f in os.listdir(SHAMIR_DIR) if f.endswith(".key")) if os.path.isdir(SHAMIR_DIR) else []
+    if not files:
+        print(f"⚠️ 本机没有分片（离线那份若存够 {k} 片以上就正常）")
+        print("   → 想验离线分片：KEYNL_SHARDS=/你放分片的目录 keynl doctor")
+    elif len(files) < k:
+        print(f"❌ 本机分片只有 {len(files)} 个，少于门限 {k} → 忘密码救不回来")
+        ok = False
+    else:
+        shares, bad = {}, []
+        for f in files:
+            try:
+                d = _read_shard(os.path.join(SHAMIR_DIR, f))
+                shares[int(d["id"])] = int(d["value"])
+            except Exception:
+                bad.append(f)
+        if bad:
+            print(f"❌ 有分片解不开：{', '.join(bad)}（env.key 变了或文件损坏）")
+            ok = False
+        if len(shares) < k:
+            print(f"❌ 可用分片不足（{len(shares)}/{k}）")
+            ok = False
+        else:
+            ids = sorted(shares)
+            tried = [ids[:k], ids[-k:]]
+            if len(ids) >= k + 1:
+                tried.append([ids[0]] + ids[k:])
+            secrets = set()
+            for s in tried:
+                if len(s) >= k:
+                    secrets.add(shamir_recover({i: shares[i] for i in s}))
+            if len(secrets) > 1:
+                print("❌ 分片互相矛盾（不是同一批生成的）→ 恢复必失败")
+                ok = False
+            else:
+                print(f"✅ {len(shares)} 片互相自洽（任意 {k} 片还原结果一致）")
+            if len(secrets) == 1 and os.path.exists(VAULT):
+                try:
+                    key2 = derive_key(next(iter(secrets)).decode())
+                    blob = Fernet(key2).decrypt(open(VAULT, "rb").read())
+                    cnt = len([x for x in json.loads(blob) if not x.startswith("_")])
+                    print(f"✅ 决定性检查：{k} 片还原出的口令能解开库（{cnt} 条）→ 分片备份有效")
+                except Exception:
+                    print(f"❌ 决定性检查失败：{k} 片还原出的口令打不开当前库")
+                    print("   → 分片是旧的/坏的，忘密码时救不回来，请重新生成分片（菜单 7）")
+                    ok = False
+
+    print("─" * 36)
+    print("🩺 结论：" + ("全部正常 ✅" if ok else "有 ❌ 项，见上（别急着删东西）"))
+    if ok and os.path.exists(VAULT):
+        try:
+            em = hash_to_emoji(hashlib.sha256(open(VAULT, "rb").read()).hexdigest(), 8)
+            print(f"   🔖 库文件表情指纹（以后变了 = 文件被改动过）: {em}")
+        except Exception:
+            pass
+    return ok
+
 
 def cmd_setpass():
     if os.path.exists(VAULT):
@@ -1356,7 +1456,7 @@ def _menu_rows():
         ("11. 查看状态", "12. 检查更新"),
         ("13. 授权窗口免密", "14. 关于作者"),
         ("15. 导出API给AI", "16. 抹除式更新"),
-        ("17. 卸载keynl", ""),
+        ("17. 卸载keynl", "18. 库体检(doctor)"),
         ("a. 重新列出菜单表", "b. 固定菜单表"),
         ("0. 退出", ""),
     ]
@@ -1414,6 +1514,7 @@ def interactive_menu():
         elif choice == "15": cmd_export()
         elif choice == "16": cmd_wipe()
         elif choice == "17": cmd_uninstall()
+        elif choice == "18": cmd_doctor()
         else: print("❌ 无效选择")
         print()
         if FIXED_MENU:
@@ -1450,6 +1551,8 @@ if __name__ == "__main__":
         cmd_wipe()
     elif cmd == "uninstall":
         cmd_uninstall()
+    elif cmd == "doctor":
+        sys.exit(0 if cmd_doctor() else 1)
     else:
         password = getpass.getpass("🔑 主密码: ")
         if cmd == "add" and args:
