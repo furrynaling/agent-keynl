@@ -2,10 +2,11 @@
 """agent-keynl v3.3 · scrypt + HSM + Shamir + 跨平台 + 交互菜单"""
 import os, sys, json, hashlib, base64, getpass, secrets, platform, ctypes, time
 from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-VERSION = "4.20.0"
+VERSION = "4.21.0"
 
 # ===== 跨平台默认目录 =====
 def default_base_dir():
@@ -113,123 +114,32 @@ def get_device_name():
     return platform.node()
 
 def report_decrypt():
-    """上报解密记录到审查中心（失败静默，不阻止解密）"""
-    try:
-        import urllib.request
-        payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token(),
-            "key_name": "密钥库", "device": get_device_name(), "system": platform.system()}).encode()
-        req = urllib.request.Request("https://furrynaling.com/api/audit/decrypt",
-            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.13"})
-        urllib.request.urlopen(req, timeout=3)
-    except:
-        pass
+    """已移除（纯本地化 v4.21.0）：不再向任何服务器上报解密记录"""
+    return
+
 
 def report_api(api_name, agent_name=""):
-    """上报 API 调用记录到审查中心"""
-    try:
-        import urllib.request
-        payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token(),
-            "api_name": api_name, "agent_name": agent_name}).encode()
-        req = urllib.request.Request("https://furrynaling.com/api/audit/api",
-            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.13"})
-        urllib.request.urlopen(req, timeout=3)
-    except:
-        pass
+    """已移除（纯本地化 v4.21.0）：不再向任何服务器上报 AI 调用记录"""
+    return
+
 
 def cmd_audit_manage():
-    """解密审查中心管理（初始化/忘记密码/重新部署/移除/访问）"""
-    cfg = load_config()
-    if "audit_env_id" not in cfg:
-        _audit_init(cfg)
-    else:
-        _audit_menu(cfg)
+    """解密审查中心 —— v4.19.0 起移除（纯本地，不上传任何数据）"""
+    print("ℹ️ 解密审查中心已在 v4.19.0 移除：本工具纯本地，不向任何服务器发送数据")
+    print("   想看「谁在什么时候解过库」→ 本机 access.log")
+
 
 def _audit_init(cfg):
-    import string, random
-    print("🔐 初始化解密审查中心")
-    print("   审查中心用于集中查看所有解密/API调用记录")
-    print("   只能设置一次，设置后不可更改")
-    confirm = input("确认初始化? (y/n): ").strip().lower()
-    if confirm != 'y':
-        print("已取消"); return
-    access_pass = ''.join(random.choices(string.digits, k=6))
-    try:
-        import urllib.request
-        payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token(),
-            "access_pass": access_pass}).encode()
-        req = urllib.request.Request("https://furrynaling.com/api/audit/init",
-            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.14"})
-        resp = json.loads(urllib.request.urlopen(req, timeout=8).read().decode())
-        if resp.get("success"):
-            cfg["audit_env_id"] = get_env_id()
-            cfg["audit_initialized"] = True
-            save_config(cfg)
-            print("✅ 审查中心已初始化")
-            print("")
-            print("━━━━━━━━━━━━━━━━━━━━━━━━")
-            print("   你的网址: https://furrynaling.com/api/audit/page")
-            print(f"   环境ID:   {get_env_id()}")
-            print(f"   访问密码: {access_pass}")
-            print("━━━━━━━━━━━━━━━━━━━━━━━━")
-            print("   ⚠️ 请截图保存！访问密码只显示这一次")
-        else:
-            print(f"⚠️ {resp.get('error', '初始化失败')}")
-    except Exception as e:
-        print(f"❌ 初始化失败(服务器不可达): {str(e)[:60]}")
+    print("ℹ️ 该功能已移除（纯本地化）")
+
 
 def _audit_menu(cfg):
-    while True:
-        print("🔐 解密审查中心")
-        print("   你已设置审查中心")
-        print(f"   环境ID: {cfg.get('audit_env_id')}")
-        print("")
-        print("  1. 忘记密码")
-        print("  2. 重新部署审查中心")
-        print("  3. 移除审查中心")
-        print("  4. 访问网址")
-        print("  0. 返回")
-        try:
-            choice = input("选择 [0-4]: ").strip()
-        except (EOFError, KeyboardInterrupt):
-            print(); break
-        if choice == "0":
-            break
-        elif choice == "1":
-            print("⚠️ 访问密码无法找回（服务器只存哈希）")
-            print("   请选 2 重新部署 生成新密码")
-        elif choice == "2":
-            _audit_reset(cfg, "RESET")
-        elif choice == "3":
-            _audit_reset(cfg, "REMOVE")
-        elif choice == "4":
-            print(f"访问网址: https://furrynaling.com/api/audit/page")
-            print(f"环境ID:   {cfg.get('audit_env_id')}")
-        else:
-            print("❌ 无效选择")
-        print()
+    print("ℹ️ 该功能已移除（纯本地化）")
+
 
 def _audit_reset(cfg, keyword):
-    print("⚠️ 此操作会重置审查中心，可能需要重新初始化")
-    confirm = input(f"输入 {keyword} 确认: ").strip()
-    if confirm != keyword:
-        print("已取消"); return
-    try:
-        import urllib.request
-        payload = json.dumps({"env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
-        req = urllib.request.Request("https://furrynaling.com/api/audit/reset",
-            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.14"})
-        resp = json.loads(urllib.request.urlopen(req, timeout=8).read().decode())
-        if resp.get("success"):
-            cfg.pop("audit_env_id", None)
-            cfg.pop("audit_initialized", None)
-            save_config(cfg)
-            print("✅ 审查中心已重置")
-            if keyword == "RESET":
-                print("   请重新初始化（再次进入菜单24）")
-        else:
-            print(f"⚠️ {resp.get('error', '操作失败')}")
-    except Exception as e:
-        print(f"❌ 操作失败: {str(e)[:60]}")
+    print("ℹ️ 该功能已移除（纯本地化）")
+
 
 def log_access(action="解密"):
     """记录一次成功解密（60秒内去重）"""
@@ -440,12 +350,45 @@ def get_ecc_fp():
     return hashlib.sha384(pub).hexdigest()[:24]
 
 # ===== 主接口 =====
+# ===== 库加密（AEAD，v4.21.0）：AES-256-GCM 优先；无 AES-NI 的机器用 ChaCha20-Poly1305 =====
+# 文件头：GCM1:=AES-256-GCM   CHP1:=ChaCha20-Poly1305   无前缀=旧版 Fernet（继续可读）
+_AAD = b"agent-keynl-vault-v1"
+
+def _aead_key(password):
+    """主密码 → 32 字节原始密钥（scrypt+env.key 派生后取 SHA-256）"""
+    return hashlib.sha256(derive_key(password)).digest()
+
+def _pick_cipher():
+    """有 AES-NI 用 AES-256-GCM；否则 ChaCha20-Poly1305（手机/老 ARM 更快）"""
+    forced = os.environ.get("KEYNL_CIPHER", "").lower()
+    if forced in ("aes", "gcm"): return "GCM1:"
+    if forced in ("chacha", "chacha20"): return "CHP1:"
+    try:
+        if "aes" in open("/proc/cpuinfo").read(): return "GCM1:"
+    except Exception:
+        pass
+    return "CHP1:"
+
+def _seal(password, raw: bytes) -> bytes:
+    key = _aead_key(password)
+    tag = _pick_cipher()
+    nonce = os.urandom(12)
+    if tag == "GCM1:":
+        return tag.encode() + nonce + AESGCM(key).encrypt(nonce, raw, _AAD)
+    return tag.encode() + nonce + ChaCha20Poly1305(key).encrypt(nonce, raw, _AAD)
+
+def _unseal(password, blob: bytes) -> bytes:
+    key = _aead_key(password)
+    if blob.startswith(b"GCM1:"):
+        return AESGCM(key).decrypt(blob[5:17], blob[17:], _AAD)
+    if blob.startswith(b"CHP1:"):
+        return ChaCha20Poly1305(key).decrypt(blob[5:17], blob[17:], _AAD)
+    return Fernet(derive_key(password)).decrypt(blob)      # v4.20 及以前的旧库
+
 def load_vault(password):
     if not os.path.exists(VAULT): return {}
     if not check_hw(): raise Exception("❌ 硬件指纹不匹配! 密文可能被复制到其他设备")
-    key = derive_key(password)
-    f = Fernet(key)
-    data = json.loads(f.decrypt(open(VAULT,'rb').read()))
+    data = json.loads(_unseal(password, open(VAULT,'rb').read()))
     if data.pop('_ecc_fp','') != get_ecc_fp(): raise Exception("❌ ECC指纹不匹配!")
     if data.pop('_sha384','') != hashlib.sha384(json.dumps({k:v for k,v in data.items() if not k.startswith('_')}, sort_keys=True).encode()).hexdigest():
         raise Exception("❌ 完整性校验失败!")
@@ -456,10 +399,8 @@ def save_vault(password, data):
     clean = {k:v for k,v in data.items() if not k.startswith('_')}
     clean['_sha384'] = hashlib.sha384(json.dumps(clean, sort_keys=True).encode()).hexdigest()
     clean['_ecc_fp'] = get_ecc_fp()
-    key = derive_key(password)
-    f = Fernet(key)
     os.makedirs(os.path.dirname(VAULT), exist_ok=True)
-    with open(VAULT, 'wb') as fh: fh.write(f.encrypt(json.dumps(clean).encode()))
+    with open(VAULT, 'wb') as fh: fh.write(_seal(password, json.dumps(clean).encode()))
     try: os.chmod(VAULT, 0o600)
     except: pass
 
@@ -543,8 +484,7 @@ def cmd_doctor():
                 print(f"✅ {len(shares)} 片互相自洽（任意 {k} 片还原结果一致）")
             if len(secrets) == 1 and os.path.exists(VAULT):
                 try:
-                    key2 = derive_key(next(iter(secrets)).decode())
-                    blob = Fernet(key2).decrypt(open(VAULT, "rb").read())
+                    blob = _unseal(next(iter(secrets)).decode(), open(VAULT, "rb").read())
                     cnt = len([x for x in json.loads(blob) if not x.startswith("_")])
                     print(f"✅ 决定性检查：{k} 片还原出的口令能解开库（{cnt} 条）→ 分片备份有效")
                 except Exception:
@@ -695,7 +635,8 @@ def cmd_list():
     if not data:
         print("  (空)"); return
     for k, v in sorted(data.items()):
-        print(f"  {k}: {'***' if len(v)>20 else v}")
+        print(f"  {k}: *** ({len(v)} 字符)")
+    print("  ℹ️ 想看明文：keynl get <名称>")
 
 def cmd_delete():
     password = _get_password()
@@ -1093,91 +1034,16 @@ def cmd_api_get(args):
         print(f"   变量: {', '.join(env_names)}")
         print(f"   AI可用 $变量名 引用，无需看到密钥")
 
-def cmd_chain():
-    """上链校验：上传哈希到服务器，返回比对链接"""
-    password = _get_password()
-    data = _load_safe(password)
-    if data is None: return
-    if not data:
-        print("❌ 密钥库为空，先存密钥"); return
-    data_str = json.dumps(data, sort_keys=True, ensure_ascii=False)
-    data_hash = hashlib.sha256(data_str.encode()).hexdigest()
-    emojis = hash_to_emoji(data_hash)
-    print("本地表情: " + " ".join(emojis))
-    print("⏳ 上传服务器...")
-    try:
-        import urllib.request
-        payload = json.dumps({"hash": data_hash, "emojis": "".join(emojis), "env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
-        req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
-            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
-        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
-        if resp.get("url"):
-            print(f"✅ 已上链: {resp['url']}")
-            if resp.get("ipfs"):
-                print(f"   📦 IPFS备份: {resp['ipfs']}")
-            if resp.get("ots"):
-                print(f"   ⛓️ 比特币存证: {resp['ots']}")
-            if resp.get("signature"):
-                print(f"   ✍️ ECC签名: {resp['signature'][:24]}...")
-            print("   打开链接，比对表情是否一致")
-        else:
-            print(f"⚠️ {resp.get('error', '上链失败')}")
-    except Exception as e:
-        print(f"❌ 上传失败(服务器链端点未部署): {str(e)[:60]}")
+def cmd_chain(*a, **kw):
+    """上链校验 —— v4.19.0 起移除（纯本地化，不向任何服务器发送数据）"""
+    print("ℹ️ 上链校验 已移除：本工具纯本地，不上传任何数据")
+
 
 def cmd_query():
-    """泄露查询：列出上链记录，选择一条查询/比对"""
-    import urllib.request
-    print("⏳ 拉取链上记录...")
-    try:
-        req = urllib.request.Request(f"https://furrynaling.com/api/chain/list?env_id={get_env_id()}&limit=500",
-            headers={"User-Agent": "agent-keynl/4.8"})
-        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
-        items = resp.get("items", [])
-        if not items:
-            print("📭 链上暂无记录，先用菜单16上链"); return
-        print(f"共 {len(items)} 条上链记录:")
-        for i, it in enumerate(items, 1):
-            print(f"  {i}. {it['emojis']}  {it['created_at']}")
-            print(f"     哈希: {it['full_hash']}")
-        print()
-        choice = input("选择要查询的编号(回车=对比本地当前数据): ").strip()
-        if choice:
-            try:
-                idx = int(choice) - 1
-                if 0 <= idx < len(items):
-                    it = items[idx]
-                    print(f"链上表情(这条记录上链时): {it['emojis']}")
-                    print(f"完整哈希: {it['full_hash']}")
-                    print(f"链上页面: https://furrynaling.com/chain/{it['full_hash'][:32]}.html")
-                    print(f"上链时间: {it['created_at']}")
-                    password = _get_password()
-                    data = _load_safe(password)
-                    if data is not None and data:
-                        data_hash = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-                        local_emojis = "".join(hash_to_emoji(data_hash))
-                        print(f"当前本地表情(现在的数据): {' '.join(hash_to_emoji(data_hash))}")
-                        print()
-                        if local_emojis == it['emojis']:
-                            print("✅ 一致：当前数据与这条记录一致，未被篡改")
-                        else:
-                            print("⚠️ 不一致：数据自这条记录后已变动")
-                            print("   （正常现象，说明你上链后又改过密钥）")
-                else:
-                    print("❌ 编号无效")
-            except:
-                print("❌ 格式错误")
-        else:
-            password = _get_password()
-            data = _load_safe(password)
-            if data is None: return
-            if not data:
-                print("❌ 密钥库为空"); return
-            data_hash = hashlib.sha256(json.dumps(data, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
-            print(f"本地表情: {' '.join(hash_to_emoji(data_hash))}")
-            print(f"链上页面: https://furrynaling.com/chain/{data_hash[:32]}.html")
-    except Exception as e:
-        print(f"❌ 查询失败(链服务器未部署): {str(e)[:60]}")
+    """泄露查询（原：对比链上记录）—— v4.19.0 起移除（纯本地化）"""
+    print("ℹ️ 泄露/链上查询已移除：本工具纯本地，不上链、不上传")
+    print("   想检查库文件有没有被改动：keynl doctor 会打印 8 个 emoji 指纹，变了就是被改过")
+
 
 def cmd_wipe():
     """抹除式更新：删除本地所有密钥，用于版本过低/不许可更新的强制重置（需主密码验证）"""
@@ -1208,94 +1074,15 @@ def cmd_wipe():
         print("  已删除: export/")
     print(f"✅ 已抹除 {removed} 个文件，重新运行 keynl 初始化")
 
-def cmd_chain_file():
-    """任意文件/文件夹上链校验"""
-    path = input("文件或文件夹路径: ").strip()
-    if not path or not os.path.exists(path):
-        print("❌ 路径不存在"); return
-    h = hashlib.sha256()
-    try:
-        if os.path.isdir(path):
-            files = []
-            for root, dirs, fs in os.walk(path):
-                for f in fs:
-                    files.append(os.path.join(root, f))
-            files.sort()
-            for fp in files:
-                rel = os.path.relpath(fp, path)
-                h.update(rel.encode())
-                with open(fp, 'rb') as f:
-                    for chunk in iter(lambda: f.read(8192), b''):
-                        h.update(chunk)
-            desc = f"文件夹 {os.path.basename(path)} ({len(files)}个文件)"
-        else:
-            with open(path, 'rb') as f:
-                for chunk in iter(lambda: f.read(8192), b''):
-                    h.update(chunk)
-            desc = f"文件 {os.path.basename(path)}"
-    except Exception as e:
-        print(f"❌ 读取失败: {e}"); return
-    file_hash = h.hexdigest()
-    emojis = hash_to_emoji(file_hash)
-    print(f"对象: {desc}")
-    print(f"原始哈希: {file_hash}")
-    print(f"表情: {' '.join(emojis)}")
-    print("⏳ 上传服务器...")
-    try:
-        import urllib.request
-        payload = json.dumps({"hash": file_hash, "emojis": "".join(emojis), "env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
-        req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
-            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
-        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
-        if resp.get("url"):
-            print(f"✅ 已上链: {resp['url']}")
-            if resp.get("ipfs"):
-                print(f"   📦 IPFS备份: {resp['ipfs']}")
-            if resp.get("ots"):
-                print(f"   ⛓️ 比特币存证: {resp['ots']}")
-        else:
-            print(f"⚠️ {resp.get('error', '上链失败')}")
-    except Exception as e:
-        print(f"❌ 上传失败: {str(e)[:60]}")
+def cmd_chain_file(*a, **kw):
+    """文件上链 —— v4.19.0 起移除（纯本地化，不向任何服务器发送数据）"""
+    print("ℹ️ 文件上链 已移除：本工具纯本地，不上传任何数据")
 
-def cmd_access_audit():
-    """解密审计：查看解密记录 + 可选上链存证"""
-    if not os.path.exists(ACCESS_LOG):
-        print("📭 无解密记录（尚未成功解密过）"); return
-    f = _shard_fernet()
-    lines = []
-    for line in open(ACCESS_LOG):
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            lines.append(f.decrypt(base64.b64decode(line)).decode())
-        except:
-            lines.append("（无法解密，非本环境记录）")
-    print(f"共 {len(lines)} 次解密记录:")
-    for line in lines[-20:]:
-        print(f"  {line}")
-    print()
-    choice = input("将解密日志上链存证? (y/n): ").strip().lower()
-    if choice != 'y':
-        return
-    h = hashlib.sha256(open(ACCESS_LOG, 'rb').read()).hexdigest()
-    emojis = hash_to_emoji(h)
-    print(f"日志哈希: {h}")
-    print(f"表情: {' '.join(emojis)}")
-    print("⏳ 上链...")
-    try:
-        import urllib.request
-        payload = json.dumps({"hash": h, "emojis": "".join(emojis), "env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
-        req = urllib.request.Request("https://furrynaling.com/api/chain/upload",
-            data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.7"})
-        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
-        if resp.get("url"):
-            print(f"✅ 解密日志已上链: {resp['url']}")
-        else:
-            print(f"⚠️ {resp.get('error', '上链失败')}")
-    except Exception as e:
-        print(f"❌ 上链失败: {str(e)[:60]}")
+
+def cmd_access_audit(*a, **kw):
+    """云端访问审计 —— v4.19.0 起移除（纯本地化，不向任何服务器发送数据）"""
+    print("ℹ️ 云端访问审计 已移除：本工具纯本地，不上传任何数据")
+
 
 def _file_hash(path):
     """计算文件/文件夹的哈希"""
@@ -1333,27 +1120,13 @@ def cmd_file_check():
     print(f"对象: {desc}")
     print(f"原始哈希: {file_hash}")
     print(f"本地表情: {' '.join(emojis)}")
-    print(f"链上页面: https://furrynaling.com/chain/{file_hash[:32]}.html")
-    print("打开页面比对表情，一致=未篡改，不一致=已篡改")
+    print("本地比对：与上次记下的表情一致=未篡改，不一致=文件被改过")
+    print("（本工具不上链、不联网；要看库文件的指纹跑 keynl doctor）")
 
-def cmd_ots_verify():
-    """验证 OTS 时间戳证明（需本机 ots CLI 或在线）"""
-    import shutil, subprocess
-    if not shutil.which("ots"):
-        print("⚠️ 本机未安装 ots CLI")
-        print("   安装: pip install opentimestamps-client")
-        print("   或在线验证: https://opentimestamps.org")
-        return
-    path = input("输入 .ots 证明文件路径: ").strip()
-    if not path or not os.path.exists(path):
-        print("❌ 文件不存在"); return
-    print("⏳ 验证时间戳证明（可能需联网查询比特币链）...")
-    try:
-        result = subprocess.run(["ots", "verify", path], capture_output=True, text=True, timeout=90)
-        out = result.stdout + result.stderr
-        print(out.strip() if out.strip() else "✅ 验证完成")
-    except Exception as e:
-        print(f"❌ 验证失败: {e}")
+def cmd_ots_verify(*a, **kw):
+    """OpenTimestamps 验证 —— v4.19.0 起移除（纯本地化，不向任何服务器发送数据）"""
+    print("ℹ️ OpenTimestamps 验证 已移除：本工具纯本地，不上传任何数据")
+
 
 def cmd_uninstall():
     """卸载 keynl：删除程序 + 所有数据（需主密码验证）"""
@@ -1391,39 +1164,10 @@ def cmd_uninstall():
     print("✅ keynl 已卸载")
     print("   重装: curl -fsSL https://raw.githubusercontent.com/furrynaling/agent-keynl/main/install.sh | bash")
 
-def cmd_mychain():
-    """我的链上密钥：查看上链记录 + 选择抹除"""
-    import urllib.request
-    print("⏳ 查询链上记录...")
-    try:
-        req = urllib.request.Request(f"https://furrynaling.com/api/chain/list?env_id={get_env_id()}&limit=500", headers={"User-Agent": "agent-keynl/4.8"})
-        resp = json.loads(urllib.request.urlopen(req, timeout=10).read().decode())
-        items = resp.get("items", [])
-        if not items:
-            print("📭 链上暂无记录")
-            return
-        print(f"共 {resp.get('count', len(items))} 条链上记录:")
-        for i, it in enumerate(items, 1):
-            print(f"  {i}. {it['emojis']}  {it['created_at']}")
-            print(f"     哈希: {it['full_hash']}")
-        print()
-        choice = input("输入要抹除的编号(逗号分隔，如 1,3)，直接回车取消: ").strip()
-        if not choice:
-            print("已取消"); return
-        idxs = [int(x)-1 for x in choice.split(',') if x.strip()]
-        for i in idxs:
-            if 0 <= i < len(items):
-                full_hash = items[i]["full_hash"]
-                payload = json.dumps({"hash": full_hash, "env_id": get_env_id(), "auth_token": get_auth_token()}).encode()
-                req2 = urllib.request.Request("https://furrynaling.com/api/chain/delete",
-                    data=payload, headers={"Content-Type": "application/json", "User-Agent": "agent-keynl/4.3"})
-                r2 = json.loads(urllib.request.urlopen(req2, timeout=10).read().decode())
-                if r2.get("success"):
-                    print(f"✅ 已抹除: {items[i]['emojis']}")
-                else:
-                    print(f"⚠️ {r2.get('error', '删除失败')}")
-    except Exception as e:
-        print(f"❌ 查询失败(链服务器未部署): {str(e)[:60]}")
+def cmd_mychain(*a, **kw):
+    """链上记录管理 —— v4.19.0 起移除（纯本地化，不向任何服务器发送数据）"""
+    print("ℹ️ 链上记录管理 已移除：本工具纯本地，不上传任何数据")
+
 
 def print_status():
     hsm_type, hsm_desc = detect_hsm()
@@ -1472,10 +1216,7 @@ def _menu_rows():
 def get_menu():
     """动态菜单：已初始化审查中心则显示云上菜单"""
     cfg = load_config()
-    if "audit_env_id" in cfg:
-        header = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔐 agent-keynl 云上菜单\n🔗 https://furrynaling.com/api/audit/page\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    else:
-        header = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔐 agent-keynl 主菜单\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    header = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n🔐 agent-keynl 主菜单 · 纯本地\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     return header + "\n" + _menu_rows()
 
 FIXED_MENU = False
@@ -1566,7 +1307,8 @@ if __name__ == "__main__":
             data = load_vault(password)
             if not data: print("  (空)")
             for k,v in sorted(data.items()):
-                print(f"  {k}: {'***' if len(v)>20 else v}")
+                print(f"  {k}: *** ({len(v)} 字符)")
+            if data: print("  ℹ️ 想看明文：keynl get <名称>")
         elif cmd == "shards":
             save_shards(password)
         elif cmd == "recover":
